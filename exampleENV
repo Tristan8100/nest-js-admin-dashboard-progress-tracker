@@ -1,0 +1,11 @@
+# Environment
+# NODE_ENV=development
+
+# Port your NestJS app will run on
+# PORT=4000
+
+# MongoDB Atlas connection string
+# MONGO_URI=mongodb+srv:......
+
+# Frontend URL for CORS configuration
+# FRONTEND_URL=http://localhost:3000
