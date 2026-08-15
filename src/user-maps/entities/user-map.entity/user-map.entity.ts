@@ -1,1 +1,107 @@
-export class UserMapEntity {}
+import { ApiProperty } from '@nestjs/swagger';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+
+export type UserMapDocument = HydratedDocument<UserMap>;
+
+@Schema({ _id: false })
+export class MapProgress { //children
+  @ApiProperty({
+    description: 'The level completed',
+    example: 1,
+  })
+  @Prop({
+    type: Number,
+    required: true,
+  })
+  level: number;
+
+  @ApiProperty({
+    description: 'The score achieved',
+    example: 950,
+  })
+  @Prop({
+    type: Number,
+    required: true,
+  })
+  score: number;
+
+  @ApiProperty({
+    description: 'The date the level was acquired',
+    example: '2026-08-15T12:30:00.000Z',
+  })
+  @Prop({
+    type: Date,
+    required: true,
+  })
+  date_acquired: Date;
+}
+
+export const MapProgressSchema =
+  SchemaFactory.createForClass(MapProgress);
+
+
+
+  
+@Schema({
+  collection: 'user_maps',
+  timestamps: {
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  },
+})
+export class UserMap { //parent
+  @ApiProperty({
+    description: 'The ID of the user who owns this map progress',
+  })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+  })
+  user_id: Types.ObjectId;
+
+  @ApiProperty({
+    description: 'The name of the map',
+    example: 'Forest of Beginnings',
+  })
+  @Prop({
+    type: String,
+    required: true,
+  })
+  name: string;
+
+  @ApiProperty({
+    description: 'The rank of the map',
+    example: 1,
+  })
+  @Prop({
+    type: Number,
+    required: true,
+  })
+  rank: number;
+
+  @ApiProperty({
+    description: 'The levels completed in this map',
+    type: [MapProgress],
+    default: [],
+  })
+  @Prop({
+    type: [MapProgressSchema],
+    default: [],
+  })
+  progress: MapProgress[];
+}
+
+export const UserMapSchema =
+  SchemaFactory.createForClass(UserMap);
+
+UserMapSchema.index(
+  {
+    user_id: 1,
+    rank: 1,
+  },
+  {
+    unique: true,
+  },
+);
