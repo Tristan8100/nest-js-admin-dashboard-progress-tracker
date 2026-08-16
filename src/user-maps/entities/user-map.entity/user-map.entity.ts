@@ -6,25 +6,18 @@ export type UserMapDocument = HydratedDocument<UserMap>;
 
 @Schema({ _id: false })
 export class MapProgress { //children
-  @ApiProperty({
-    description: 'The level completed',
-    example: 1,
-  })
-  @Prop({
-    type: Number,
-    required: true,
-  })
-  level: number;
+  @Prop({ type: String, enum: ['level', 'tutorial', 'knowledge_check'], required: true })
+  type: string;
 
   @ApiProperty({
-    description: 'The score achieved',
-    example: 950,
+    description: 'The index of the completed item',
+    example: 1,
   })
-  @Prop({
-    type: Number,
-    required: true,
-  })
-  score: number;
+  @Prop({ type: Number, required: true })
+  index: number; // level index, tutorial index, or KC index — depends on `type`
+
+  @Prop({ type: Number, required: false })
+  score?: number; // stars (levels), correct-count (knowledge checks). Omit/null for tutorials.
 
   @ApiProperty({
     description: 'The date the level was acquired',

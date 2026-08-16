@@ -38,20 +38,20 @@ export class UserMapsService {
     createProgressDto: CreateProgressDto,
   ) {
     this.validateObjectId(userId);
-
+  
     const userExists = await this.userModel.exists({
       _id: userId,
     });
-
+  
     if (!userExists) {
       throw new NotFoundException('User not found');
     }
-
+  
     let userMap = await this.userMapModel.findOne({
       user_id: userId,
       rank,
     });
-
+  
     // User has never played this map.
     // Create the map progress automatically.
     if (!userMap) {
@@ -61,41 +61,40 @@ export class UserMapsService {
         rank,
         progress: [
           {
-            level: createProgressDto.level,
+            type: createProgressDto.type,
+            index: createProgressDto.index,
             score: createProgressDto.score,
             date_acquired: new Date(),
           },
         ],
       });
-
+  
       return userMap.save();
     }
-
+  
     // Map already exists.
     const existingProgress =
       userMap.progress.find(
         (progress) =>
-          progress.level ===
-          createProgressDto.level,
+          progress.index === createProgressDto.index &&
+          progress.type === createProgressDto.type,
       );
-
+  
     if (!existingProgress) {
       userMap.progress.push({
-        level: createProgressDto.level,
+        type: createProgressDto.type,
+        index: createProgressDto.index,
         score: createProgressDto.score,
         date_acquired: new Date(),
       });
     } else {
-      existingProgress.score =
-        createProgressDto.score;
-
-      existingProgress.date_acquired =
-        new Date();
+      existingProgress.score = createProgressDto.score;
+      existingProgress.date_acquired = new Date();
     }
-
+  
     // Keep the latest name from the game.
     userMap.name = createProgressDto.name;
-
+  
     return userMap.save();
   }
 
@@ -119,7 +118,7 @@ export class UserMapsService {
     }
 
     const progress = userMap.progress.find(
-      (item) => item.level === level,
+      (item) => item.index === level,
     );
 
     if (!progress) {
@@ -207,7 +206,7 @@ export class UserMapsService {
     const progressIndex =
       userMap.progress.findIndex(
         (progress) =>
-          progress.level === level,
+          progress.index === level,
       );
 
     if (progressIndex === -1) {

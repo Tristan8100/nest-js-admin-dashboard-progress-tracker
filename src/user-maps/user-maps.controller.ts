@@ -43,7 +43,7 @@ export class UserMapsController {
     type: CreateProgressDto,
   })
   saveProgress(
-    @Param('userId') userId: string,
+    @Param('userId') userId: string, //will decide if manually at params or bearer token
     @Param('rank') rank: string,
     @Body() createProgressDto: CreateProgressDto,
   ) {
@@ -57,17 +57,6 @@ export class UserMapsController {
   @Patch(':rank/progress/:level')
   @ApiOperation({
     summary: 'Update progress for a level',
-  })
-  @ApiParam({
-    name: 'rank',
-    example: 1,
-  })
-  @ApiParam({
-    name: 'level',
-    example: 1,
-  })
-  @ApiBody({
-    type: UpdateProgressDto,
   })
   updateProgress(
     @Param('userId') userId: string,

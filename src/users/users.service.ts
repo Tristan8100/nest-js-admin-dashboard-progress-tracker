@@ -43,6 +43,9 @@ export class UsersService {
     return this.userModel.create({
       email: createUserDto.email,
       name: createUserDto.name,
+      username: createUserDto.username,
+      gradeLevel: createUserDto.gradeLevel,
+      section: createUserDto.section,
       password: hashedPassword,
       email_verified_at: null,
     });

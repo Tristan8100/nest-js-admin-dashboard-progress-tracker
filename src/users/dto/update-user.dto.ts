@@ -19,6 +19,14 @@ export class UpdateUserDto {
   @IsString()
   name?: string;
 
+  // @ApiPropertyOptional({
+  //   description: 'The updated username of the user. Must be unique.',
+  //   example: 'johndoe123',
+  // })
+  // @IsOptional()
+  // @IsString()
+  // username?: string;
+
   @ApiPropertyOptional({
     description: 'The updated password for the user account. Must be at least 8 characters long.',
     example: 'newStrongPassword123',

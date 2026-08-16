@@ -1,27 +1,46 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+
+export enum ProgressType {
+  LEVEL = 'level',
+  TUTORIAL = 'tutorial',
+  KNOWLEDGE_CHECK = 'knowledge_check',
+}
 
 export class CreateProgressDto {
   @ApiProperty({
-    description: 'The name of the map',
-    example: 'Forest of Beginnings',
+    description:
+      'The name of the map this progress belongs to (used to look up the UserMap, since Unity has no map _id to reference)',
+    example: 'materials',
   })
   @IsString()
   name: string;
 
   @ApiProperty({
-    description: 'The completed level number',
-    example: 1,
+    description: 'The type of progress entry',
+    enum: ProgressType,
+    example: ProgressType.LEVEL,
   })
-  @IsNumber()
-  @Min(1)
-  level: number;
+  @IsEnum(ProgressType)
+  type: ProgressType;
 
   @ApiProperty({
-    description: 'The score achieved for the level',
-    example: 950,
+    description:
+      'The index of the item within its type (level index, tutorial index, or knowledge check index)',
+    example: 3,
   })
+  @IsInt()
+  @Min(0)
+  index: number;
+
+  @ApiProperty({
+    description:
+      'Score for this entry (stars for level, correct answers for knowledge_check). Omit for tutorial.',
+    example: 3,
+    required: false,
+  })
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  score: number;
+  score?: number;
 }

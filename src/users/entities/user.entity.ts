@@ -17,12 +17,24 @@ export class User {
   @Prop({ required: true })
   name: string;
 
+  @Prop({ required: true, unique: true })
+  username: string;
+
   @Prop({ 
     type: String, 
     enum: ['admin', 'user'], 
     default: 'user' 
   })
   role: string;
+
+  @Prop({ required: true, default: 0 })
+  coins: number;
+
+  @Prop({ required: true, default: 3 })
+  gradeLevel: number;
+
+  @Prop({ required: true, default: 'A' })
+  section: string;
 
   @Prop({ required: true })
   password: string;
