@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserDocument } from './entities/user.entity';
+import { RegisterStudentDto } from './dto/register-student.dto';
 
 @Injectable()
 export class UsersService {
@@ -49,6 +50,37 @@ export class UsersService {
       password: hashedPassword,
       email_verified_at: null,
     });
+  }
+
+  async registerStudent(dto: RegisterStudentDto) {
+    const existingUsername = await this.userModel.exists({
+      username: dto.username,
+    });
+ 
+    if (existingUsername) {
+      throw new ConflictException('Username already taken');
+    }
+ 
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+ 
+    const student = new this.userModel({
+      name: dto.name,
+      username: dto.username,
+      password: hashedPassword,
+      section: dto.section,
+      gradeLevel: dto.gradeLevel,
+      email: dto.email ?? null,
+      role: 'student',
+      // students are considered "verified" immediately, since there's no
+      // email OTP flow for them, unlike teacher accounts
+      email_verified_at: new Date(),
+    });
+ 
+    const saved = await student.save();
+ 
+    // Never return the password hash to the client
+    const { password, ...safeStudent } = saved.toObject();
+    return safeStudent;
   }
 
   async findAll(): Promise<UserDocument[]> {

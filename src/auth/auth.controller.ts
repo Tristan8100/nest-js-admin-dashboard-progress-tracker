@@ -14,17 +14,14 @@ export class AuthController {
     constructor(private authService: AuthService) {}
 
     @ApiOperation({ summary: 'User Sign In' })
-    @ApiResponse({ status: 201, description: 'Successful Login, returns JWT token.'})
-    @ApiResponse({ status: 401, description: 'Unauthorized or email not verified.'})
     @Post('login')
     signIn(@Body() signInDto:SignInDto) {
-       const val = this.authService.signIn(signInDto.email, signInDto.password);
+       const val = this.authService.signIn(signInDto.password, signInDto.email, signInDto.username);
        return val;
     }
 
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Access a protected resource' })
-    @ApiResponse({ status: 200, description: 'Returns a confirmation message.'})
     @UseGuards(AuthGuard)
     @Get('protected')
     getProtectedResource(@Request() req) {
@@ -33,7 +30,6 @@ export class AuthController {
 
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Access a protected resource for users' })
-    @ApiResponse({ status: 200, description: 'Returns a confirmation message.'})
     @UseGuards(AuthGuard, RolesGuard) // for roles
     @Role('user') // specify roles that can access this route
     @Get('protected-users')
@@ -43,7 +39,6 @@ export class AuthController {
 
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Access a protected resource for users' })
-    @ApiResponse({ status: 200, description: 'Returns a confirmation message.'})
     @UseGuards(AuthGuard, RolesGuard) // for roles
     @Role('admin') // specify roles that can access this route
     @Get('protected-admin')
@@ -52,7 +47,6 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'Register a new user' })
-    @ApiResponse({ status: 201, description: 'Registration success, an email verification OTP will be sent.'})
     @Post('register')
     register(@Body() registerDto: CreateUserDto) {
         const val = this.authService.register(registerDto);
@@ -60,7 +54,6 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'Send OTP to a user\'s email for verification' })
-    @ApiResponse({ status: 201, description: 'OTP sent successfully.'})
     @Post('send-otp')
     sendOtp(@Body() data : SendOtpDto) {
         const val = this.authService.sendOtp(data);
@@ -68,7 +61,6 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'Verify user email with OTP' })
-    @ApiResponse({ status: 201, description: 'Email verified successfully.'})
     @Post('verify-otp')
     verifyEmail(@Body() data : VerifyEmailDto) {
         const val = this.authService.verifyEmail(data.email, data.otp);
@@ -76,7 +68,6 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'Request a password reset link (sends OTP)' })
-    @ApiResponse({ status: 201, description: 'Password reset OTP sent successfully.'})
     @Post('forgot-password')
     resetLink(@Body() data : SendOtpDto) {
         const val = this.authService.resetLink(data);
@@ -84,7 +75,6 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'Verify the password reset OTP' })
-    @ApiResponse({ status: 201, description: 'Reset code verified, returns a temporary token for password reset.'})
     @Post('forgot-password-token')
     verifyResetCode(@Body() data : VerifyEmailDto) {
         const val = this.authService.verifyResetCode(data);
@@ -92,7 +82,6 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'Reset user password with temporary token' })
-    @ApiResponse({ status: 201, description: 'Password reset successfully.'})
     @Post('reset-password')
     resetPassword(@Body() data : ResetPasswordDto) {
         const val = this.authService.resetPassword(data);

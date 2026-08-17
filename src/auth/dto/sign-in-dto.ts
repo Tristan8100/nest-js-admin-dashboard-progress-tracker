@@ -7,8 +7,14 @@ export class SignInDto {
         example: 'john.doe@example.com',
     })
     @IsEmail()
-    @IsNotEmpty()
-    email: string;
+    email?: string;
+
+    @ApiProperty({
+        description: 'The username of the user for signing in.',
+        example: 'johndoe123',
+    })
+    @IsString()
+    username?: string;
 
     @ApiProperty({
         description: 'The password for the user account.',

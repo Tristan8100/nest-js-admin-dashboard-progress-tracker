@@ -58,11 +58,26 @@ export class AuthService {
     return code;
   }
 
-  async signIn(email: string, password: string): Promise<any> {
-    const user = await this.usersModel.findOne({ email }).select('+password').exec();
+  async signIn(password: string, email?: string, username?: string): Promise<any> {
+    // Build the query explicitly instead of relying on $or with possibly-undefined fields
+    const orConditions: Record<string, string>[] = [];
+    if (email) orConditions.push({ email });
+    if (username) orConditions.push({ username });
+
+    if (orConditions.length === 0) {
+      throw new UnauthorizedException('Email or username is required');
+    }
+
+    const user = await this.usersModel
+      .findOne({ $or: orConditions })
+      .select('+password')
+      .exec();
+
     if (!user) throw new UnauthorizedException('User not found');
 
-    if (!user.email_verified_at) {
+    // Only teachers go through email verification.
+    // Students don't have email verification at all.
+    if (user.role === 'admin' && !user.email_verified_at) {
       await this.sendVerificationCode(user.email);
       throw new ForbiddenException('Email not verified');
     }
@@ -70,14 +85,21 @@ export class AuthService {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
 
-    const payload = { id: user._id.toString(), email: user.email };
+    const payload = { id: user._id.toString(), role: user.role };
     const token = this.jwtService.sign(payload);
 
     return {
       message: 'Login success',
       token,
       status: 'success',
-      user_info: { id: user._id.toString(), name: user.name, email: user.email },
+      user_info: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email ?? null,
+        username: user.username,
+        role: user.role,
+        section: user.section ?? null,
+      },
     };
   }
 
