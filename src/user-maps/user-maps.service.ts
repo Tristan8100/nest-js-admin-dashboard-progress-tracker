@@ -18,7 +18,8 @@ import {
 
 import {
   UserMap,
-  UserMapDocument } from './entities/user-map.entity/user-map.entity';
+  UserMapDocument,
+} from './entities/user-map.entity/user-map.entity';
 
 import { CreateProgressDto } from './dto/create-progress.dto/create-progress.dto';
 
@@ -37,27 +38,27 @@ export class UserMapsService {
     rank: number,
     createProgressDto: CreateProgressDto,
   ) {
-    this.validateObjectId(userId);
-  
+    const userObjectId = this.getObjectId(userId);
+
     const userExists = await this.userModel.exists({
-      _id: userId,
+      _id: userObjectId,
     });
-  
+
     if (!userExists) {
       throw new NotFoundException('User not found');
     }
-  
+
     let userMap = await this.userMapModel.findOne({
-      user_id: userId,
+      user_id: userObjectId,
       rank,
     });
-  
+
     // User has never played this map.
     // Create the map progress automatically.
     if (!userMap) {
-      userMap = new this.userMapModel({ //create parent first
-        user_id: new Types.ObjectId(userId),
-        name: createProgressDto.name,
+      userMap = new this.userMapModel({
+        user_id: userObjectId,
+        name: createProgressDto.name, //will override the name, but the game logic won't allow this to happen, given the rank is tightly on the name.
         rank,
         progress: [
           {
@@ -68,18 +69,17 @@ export class UserMapsService {
           },
         ],
       });
-  
+
       return userMap.save();
     }
-  
+
     // Map already exists.
-    const existingProgress =
-      userMap.progress.find(
-        (progress) =>
-          progress.index === createProgressDto.index &&
-          progress.type === createProgressDto.type,
-      );
-  
+    const existingProgress = userMap.progress.find(
+      (progress) =>
+        progress.index === createProgressDto.index &&
+        progress.type === createProgressDto.type,
+    );
+
     if (!existingProgress) {
       userMap.progress.push({
         type: createProgressDto.type,
@@ -91,10 +91,10 @@ export class UserMapsService {
       existingProgress.score = createProgressDto.score;
       existingProgress.date_acquired = new Date();
     }
-  
+
     // Keep the latest name from the game.
     userMap.name = createProgressDto.name;
-  
+
     return userMap.save();
   }
 
@@ -104,10 +104,10 @@ export class UserMapsService {
     level: number,
     score: number,
   ) {
-    this.validateObjectId(userId);
+    const userObjectId = this.getObjectId(userId);
 
     const userMap = await this.userMapModel.findOne({
-      user_id: userId,
+      user_id: userObjectId,
       rank,
     });
 
@@ -133,14 +133,12 @@ export class UserMapsService {
     return userMap.save();
   }
 
-  async findAllUserMaps(
-    userId: string,
-  ) {
-    this.validateObjectId(userId);
+  async findAllUserMaps(userId: string) {
+    const userObjectId = this.getObjectId(userId);
 
     return this.userMapModel
       .find({
-        user_id: userId,
+        user_id: userObjectId,
       })
       .sort({
         rank: 1,
@@ -152,15 +150,14 @@ export class UserMapsService {
     userId: string,
     rank: number,
   ) {
-    this.validateObjectId(userId);
+    const userObjectId = this.getObjectId(userId);
 
-    const userMap =
-      await this.userMapModel
-        .findOne({
-          user_id: userId,
-          rank,
-        })
-        .lean();
+    const userMap = await this.userMapModel
+      .findOne({
+        user_id: userObjectId,
+        rank,
+      })
+      .lean();
 
     if (!userMap) {
       throw new NotFoundException(
@@ -175,11 +172,10 @@ export class UserMapsService {
     userId: string,
     rank: number,
   ) {
-    const userMap =
-      await this.findUserMap(
-        userId,
-        rank,
-      );
+    const userMap = await this.findUserMap(
+      userId,
+      rank,
+    );
 
     return userMap.progress;
   }
@@ -189,13 +185,12 @@ export class UserMapsService {
     rank: number,
     level: number,
   ) {
-    this.validateObjectId(userId);
+    const userObjectId = this.getObjectId(userId);
 
-    const userMap =
-      await this.userMapModel.findOne({
-        user_id: userId,
-        rank,
-      });
+    const userMap = await this.userMapModel.findOne({
+      user_id: userObjectId,
+      rank,
+    });
 
     if (!userMap) {
       throw new NotFoundException(
@@ -203,11 +198,9 @@ export class UserMapsService {
       );
     }
 
-    const progressIndex =
-      userMap.progress.findIndex(
-        (progress) =>
-          progress.index === level,
-      );
+    const progressIndex = userMap.progress.findIndex(
+      (progress) => progress.index === level,
+    );
 
     if (progressIndex === -1) {
       throw new NotFoundException(
@@ -215,12 +208,9 @@ export class UserMapsService {
       );
     }
 
-    userMap.progress.splice(
-      progressIndex,
-      1,
-    );
+    userMap.progress.splice(progressIndex, 1);
 
-    // If no levels remain, remove the
+    // If no progress remains, remove the
     // user's map record as well.
     if (userMap.progress.length === 0) {
       await userMap.deleteOne();
@@ -234,18 +224,17 @@ export class UserMapsService {
     await userMap.save();
 
     return {
-      message:
-        'Progress deleted successfully',
+      message: 'Progress deleted successfully',
     };
   }
 
-  private validateObjectId(
-    id: string,
-  ) {
+  private getObjectId(id: string): Types.ObjectId {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(
         `Invalid user ID: ${id}`,
       );
     }
+
+    return new Types.ObjectId(id);
   }
 }
