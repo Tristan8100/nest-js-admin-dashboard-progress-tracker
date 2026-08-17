@@ -26,21 +26,21 @@ export class CreateUserDto {
   @IsString()
   username: string;
 
-  @ApiProperty({
-    description: 'The grade level of the user.',
-    example: 3,
-  })
-  @IsNotEmpty()
-  @IsNumber()
-  gradeLevel: number;
+  // @ApiProperty({
+  //   description: 'The grade level of the user.',
+  //   example: 3,
+  // })
+  // @IsNotEmpty()
+  // @IsNumber()
+  // gradeLevel: number;
 
-  @ApiProperty({
-    description: 'The section of the user.',
-    example: 'A',
-  })
-  @IsNotEmpty()
-  @IsString()
-  section: string;
+  // @ApiProperty({
+  //   description: 'The section of the user.',
+  //   example: 'A',
+  // })
+  // @IsNotEmpty()
+  // @IsString()
+  // section: string;
 
   @ApiProperty({
     description: 'The password for the user account. Must be at least 8 characters long.',

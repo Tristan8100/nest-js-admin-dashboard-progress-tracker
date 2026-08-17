@@ -190,7 +190,8 @@ export class AuthService {
   }
 
   async user(data: any): Promise<any> {
-    const user = await this.usersModel.findOne({ email: data.email }).exec();
+    const user = await this.usersModel.findOne({ _id: data.id }).exec();
+    console.log("THE DATA: ", data);
     if (!user) throw new NotFoundException('User not found');
 
     return {

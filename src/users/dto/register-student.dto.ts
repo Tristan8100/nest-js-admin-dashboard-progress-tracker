@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength, Matches } from 'class-validator';
+import { IsString, IsOptional, MinLength, Matches, IsNumber } from 'class-validator';
 
 export class RegisterStudentDto {
   @ApiProperty({
@@ -37,10 +37,10 @@ export class RegisterStudentDto {
 
   @ApiProperty({
     description: "The student's grade level",
-    example: 'Grade 3',
+    example: 3,
   })
-  @IsString()
-  gradeLevel: string;
+  @IsNumber()
+  gradeLevel: number;
 
   @ApiProperty({
     description: 'Optional email for the student (not required)',

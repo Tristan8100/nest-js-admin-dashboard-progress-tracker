@@ -18,8 +18,6 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @ApiOperation({ summary: 'Create a new user (Note: use /api/register for public registration)' })
-  @ApiResponse({ status: 201, description: 'The user has been successfully created.' })
-  @ApiResponse({ status: 400, description: 'Bad Request.' })
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
@@ -35,9 +33,6 @@ export class UsersController {
       'Creates a student account with a permanent username and a resettable password. ' +
       'Only accessible by an authenticated teacher.',
   })
-  @ApiResponse({ status: 201, description: 'Student account created successfully.' })
-  @ApiResponse({ status: 409, description: 'Username already taken.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized: must be logged in as a teacher.' })
   registerStudent(@Body() dto: RegisterStudentDto) {
     return this.usersService.registerStudent(dto);
   }

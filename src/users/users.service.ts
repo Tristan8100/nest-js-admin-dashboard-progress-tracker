@@ -45,8 +45,8 @@ export class UsersService {
       email: createUserDto.email,
       name: createUserDto.name,
       username: createUserDto.username,
-      gradeLevel: createUserDto.gradeLevel,
-      section: createUserDto.section,
+      // gradeLevel: createUserDto.gradeLevel,
+      // section: createUserDto.section,
       password: hashedPassword,
       email_verified_at: null,
     });
@@ -70,10 +70,7 @@ export class UsersService {
       section: dto.section,
       gradeLevel: dto.gradeLevel,
       email: dto.email ?? null,
-      role: 'student',
-      // students are considered "verified" immediately, since there's no
-      // email OTP flow for them, unlike teacher accounts
-      email_verified_at: new Date(),
+      email_verified_at: new Date(), //auto verify for now
     });
  
     const saved = await student.save();
