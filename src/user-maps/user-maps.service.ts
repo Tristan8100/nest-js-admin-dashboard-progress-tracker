@@ -63,7 +63,7 @@ export class UserMapsService {
         progress: [
           {
             type: createProgressDto.type,
-            index: createProgressDto.index,
+            index: createProgressDto.level,
             score: createProgressDto.score,
             date_acquired: new Date(),
           },
@@ -76,14 +76,14 @@ export class UserMapsService {
     // Map already exists.
     const existingProgress = userMap.progress.find(
       (progress) =>
-        progress.index === createProgressDto.index &&
+        progress.level === createProgressDto.level &&
         progress.type === createProgressDto.type,
     );
 
     if (!existingProgress) {
       userMap.progress.push({
         type: createProgressDto.type,
-        index: createProgressDto.index,
+        level: createProgressDto.level,
         score: createProgressDto.score,
         date_acquired: new Date(),
       });
@@ -118,7 +118,7 @@ export class UserMapsService {
     }
 
     const progress = userMap.progress.find(
-      (item) => item.index === level,
+      (item) => item.level === level,
     );
 
     if (!progress) {
@@ -199,7 +199,7 @@ export class UserMapsService {
     }
 
     const progressIndex = userMap.progress.findIndex(
-      (progress) => progress.index === level,
+      (progress) => progress.level === level,
     );
 
     if (progressIndex === -1) {

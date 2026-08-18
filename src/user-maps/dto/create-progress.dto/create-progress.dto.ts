@@ -31,7 +31,8 @@ export class CreateProgressDto {
   })
   @IsInt()
   @Min(0)
-  index: number;
+  @IsOptional()
+  level: number;
 
   @ApiProperty({
     description:

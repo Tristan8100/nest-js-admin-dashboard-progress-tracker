@@ -10,11 +10,11 @@ export class MapProgress { //children
   type: string;
 
   @ApiProperty({
-    description: 'The index of the completed item',
+    description: 'The level of the completed item',
     example: 1,
   })
-  @Prop({ type: Number, required: true })
-  index: number; // level index, tutorial index, or KC index — depends on `type`
+  @Prop({ type: Number, required: false })
+  level?: number; // level index, tutorial index, or KC index — depends on `type`
 
   @Prop({ type: Number, required: false })
   score?: number; // stars (levels), correct-count (knowledge checks). Omit/null for tutorials.
