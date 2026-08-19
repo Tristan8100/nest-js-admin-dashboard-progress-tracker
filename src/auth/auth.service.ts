@@ -46,9 +46,9 @@ export class AuthService {
 
     try {
       await transporter.sendMail({
-        from: `"ECHOMIND" <${process.env.MAIL_FROM_ADDRESS}>`,
+        from: `"APP TRACKER" <${process.env.MAIL_FROM_ADDRESS}>`,
         to: email,
-        subject: 'Your Echomind Verification Code',
+        subject: 'Your APP TRACKER Verification Code',
         html: `<div>Your verification code is: <strong>${code}</strong></div>`,
       });
     } catch (err) {
@@ -149,9 +149,9 @@ export class AuthService {
     }
 
     await transporter.sendMail({
-      from: `"ECHOMIND" <${process.env.MAIL_FROM_ADDRESS}>`,
+      from: `"APP TRACKER" <${process.env.MAIL_FROM_ADDRESS}>`,
       to: email,
-      subject: 'Your Echomind Password Reset Code',
+      subject: 'Your APP TRACKER Password Reset Code',
       html: `<div>Your password reset code is: <strong>${code}</strong></div>`,
     });
 

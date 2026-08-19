@@ -36,8 +36,26 @@ export class UsersService {
     }
   }
 
+  private async checkUsernameExists(
+    username: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const query: any = { username };
+
+    if (excludeId) {
+      query._id = { $ne: new Types.ObjectId(excludeId) };
+    }
+
+    const existingUser = await this.userModel.findOne(query).exec();
+
+    if (existingUser) {
+      throw new ConflictException('Username already exists');
+    }
+  }
+
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
     await this.checkEmailExists(createUserDto.email);
+    await this.checkUsernameExists(createUserDto.username);
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
@@ -47,6 +65,7 @@ export class UsersService {
       username: createUserDto.username,
       // gradeLevel: createUserDto.gradeLevel,
       // section: createUserDto.section,
+      role: 'admin', // default role since teacher can only register
       password: hashedPassword,
       email_verified_at: null,
     });
