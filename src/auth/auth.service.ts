@@ -78,7 +78,7 @@ export class AuthService {
     // Only teachers go through email verification.
     // Students don't have email verification at all.
     if (user.role === 'admin' && !user.email_verified_at) {
-      await this.sendVerificationCode(user.email);
+      await this.sendVerificationCode(user.email ?? '');
       throw new ForbiddenException('Email not verified');
     }
 
@@ -105,8 +105,8 @@ export class AuthService {
 
   async register(register: CreateUserDto): Promise<any> {
     const user = await this.usersService.create(register);
-    const code = await this.sendVerificationCode(user.email);
-    return { message: 'Registration success', email: user.email, code };
+    const code = await this.sendVerificationCode(user.email ?? '');
+    return { message: 'Registration success', email: user.email ?? null, code };
   }
 
   async sendOtp(sendOtpDto: SendOtpDto): Promise<any> {

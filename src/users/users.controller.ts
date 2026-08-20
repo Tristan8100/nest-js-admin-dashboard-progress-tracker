@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -8,6 +8,7 @@ import { RolesGuard } from 'src/auth/auth.user';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { UseGuards } from '@nestjs/common';
 import { Role } from 'src/auth/auth.user';
+import { UserQueryDto } from './dto/user-query.dto';
 
 // For a real-world application, these endpoints should be protected, for example, with a guard that checks for an Admin role.
 // @ApiBearerAuth()
@@ -44,6 +45,13 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Get('students')
+  async findStudents(
+    @Query() query: UserQueryDto,
+  ) {
+    return this.usersService.findStudents(query);
+  }
+
   @ApiOperation({ summary: 'Get a user by ID' })
   @ApiResponse({ status: 200, description: 'Return the user.' })
   @ApiResponse({ status: 404, description: 'User not found.' })
@@ -67,4 +75,6 @@ export class UsersController {
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
+
+  
 }

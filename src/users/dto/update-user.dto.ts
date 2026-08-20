@@ -1,6 +1,12 @@
-
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({
@@ -19,16 +25,18 @@ export class UpdateUserDto {
   @IsString()
   name?: string;
 
-  // @ApiPropertyOptional({
-  //   description: 'The updated username of the user. Must be unique.',
-  //   example: 'johndoe123',
-  // })
-  // @IsOptional()
-  // @IsString()
-  // username?: string;
+  @ApiPropertyOptional({
+    description:
+      'The updated username of the user. Must be unique.',
+    example: 'johndoe123',
+  })
+  @IsOptional()
+  @IsString()
+  username?: string;
 
   @ApiPropertyOptional({
-    description: 'The updated password for the user account. Must be at least 8 characters long.',
+    description:
+      'The updated password. Must be at least 8 characters long.',
     example: 'newStrongPassword123',
     minLength: 8,
   })
@@ -36,4 +44,21 @@ export class UpdateUserDto {
   @IsString()
   @MinLength(8)
   password?: string;
+
+  @ApiPropertyOptional({
+    description: "The student's grade level.",
+    example: 3,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  gradeLevel?: number;
+
+  @ApiPropertyOptional({
+    description: "The student's section.",
+    example: 'A',
+  })
+  @IsOptional()
+  @IsString()
+  section?: string;
 }

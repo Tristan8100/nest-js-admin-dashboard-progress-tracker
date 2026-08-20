@@ -11,8 +11,12 @@ export type UserDocument = HydratedDocument<User>;
   },
 })
 export class User {
-  @Prop({ required: true, unique: true })
-  email: string;
+  @Prop({
+    required: false,
+    unique: true,
+    sparse: true,
+  })
+  email?: string;
 
   @Prop({ required: true })
   name: string;
@@ -20,28 +24,39 @@ export class User {
   @Prop({ required: true, unique: true })
   username: string;
 
-  @Prop({ 
-    type: String, 
-    enum: ['admin', 'user'], 
-    default: 'user' 
+  @Prop({
+    type: String,
+    enum: ['admin', 'user'],
+    default: 'user',
   })
   role: string;
 
-  @Prop({ required: true, default: 0 })
+  @Prop({
+    required: true,
+    default: 0,
+  })
   coins: number;
 
-  @Prop({ required: true, default: 3 })
+  @Prop({
+    required: true,
+    default: 3,
+  })
   gradeLevel: number;
 
-  @Prop({ required: true, default: 'A' })
+  @Prop({
+    required: true,
+    default: 'A',
+  })
   section: string;
 
   @Prop({ required: true })
   password: string;
 
-  @Prop({ type: Date, default: null })
+  @Prop({
+    type: Date,
+    default: null,
+  })
   email_verified_at: Date | null;
-
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

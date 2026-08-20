@@ -11,6 +11,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserDocument } from './entities/user.entity';
 import { RegisterStudentDto } from './dto/register-student.dto';
+import { UserQueryDto } from './dto/user-query.dto';
 
 @Injectable()
 export class UsersService {
@@ -75,27 +76,42 @@ export class UsersService {
     const existingUsername = await this.userModel.exists({
       username: dto.username,
     });
- 
+
     if (existingUsername) {
       throw new ConflictException('Username already taken');
     }
- 
+
+    if (dto.email) {
+      const existingEmail = await this.userModel.exists({
+        email: dto.email,
+      });
+
+      if (existingEmail) {
+        throw new ConflictException('Email already taken');
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(dto.password, 10);
- 
+
     const student = new this.userModel({
       name: dto.name,
       username: dto.username,
       password: hashedPassword,
       section: dto.section,
       gradeLevel: dto.gradeLevel,
-      email: dto.email ?? null,
-      email_verified_at: new Date(), //auto verify for now
+
+      ...(dto.email
+        ? {
+            email: dto.email,
+          }
+        : {}),
     });
- 
+
     const saved = await student.save();
- 
-    // Never return the password hash to the client
-    const { password, ...safeStudent } = saved.toObject();
+
+    const { password, ...safeStudent } =
+      saved.toObject();
+
     return safeStudent;
   }
 
@@ -118,24 +134,112 @@ export class UsersService {
   async update(
     id: string | Types.ObjectId,
     updateUserDto: UpdateUserDto,
-  ): Promise<UserDocument> {
+  ) {
     const user = await this.findOne(id);
 
     if (updateUserDto.email) {
-      await this.checkEmailExists(updateUserDto.email, user._id.toString());
+      await this.checkEmailExists(
+        updateUserDto.email,
+        user._id.toString(),
+      );
+    }
+
+    if (updateUserDto.username) {
+      await this.checkUsernameExists(
+        updateUserDto.username,
+        user._id.toString(),
+      );
     }
 
     if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+      updateUserDto.password = await bcrypt.hash(
+        updateUserDto.password,
+        10,
+      );
     }
 
-    Object.assign(user, updateUserDto);
+    const updatedUser =
+      await this.userModel.findByIdAndUpdate(
+        id,
+        updateUserDto,
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
 
-    return user.save();
+    return updatedUser;
   }
 
   async remove(id: string | Types.ObjectId): Promise<void> {
     const user = await this.findOne(id);
     await user.deleteOne();
+  }
+
+  async findStudents(query: UserQueryDto) {
+    const {
+      search,
+      gradeLevel,
+      section,
+      page = 1,
+      limit = 10,
+      sortBy = 'created_at',
+      sortOrder = 'desc',
+    } = query;
+
+    const filter: Record<string, any> = {
+      role: 'user',
+    };
+
+    if (search?.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+
+      filter.$or = [
+        { name: regex },
+        { username: regex },
+        { email: regex },
+      ];
+    }
+
+    if (gradeLevel !== undefined) {
+      filter.gradeLevel = gradeLevel;
+    }
+
+    if (section?.trim()) {
+      filter.section = section.trim();
+    }
+
+    const skip = (page - 1) * limit;
+
+    const sort: Record<string, 1 | -1> = {
+      [sortBy]: sortOrder === 'asc' ? 1 : -1,
+    };
+
+    const [students, total] = await Promise.all([
+      this.userModel
+        .find(filter)
+        .select('-password')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      this.userModel.countDocuments(filter),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: students,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    };
   }
 }
