@@ -91,6 +91,7 @@ export class AuthController {
     @ApiOperation({ summary: 'Get current authenticated user details' })
     @ApiBearerAuth()
     @UseGuards(AuthGuard, RolesGuard) // for roles
+    @Role('user', 'admin') // specify roles that can access this route
     @Get('verify-user')
     setUser(@Request() req) {
         return this.authService.user(req.user);
