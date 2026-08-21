@@ -39,13 +39,13 @@ export class User {
 
   @Prop({
     required: true,
-    default: 3,
+    default: null,
   })
   gradeLevel: number;
 
   @Prop({
     required: true,
-    default: 'A',
+    default: null,
   })
   section: string;
 
