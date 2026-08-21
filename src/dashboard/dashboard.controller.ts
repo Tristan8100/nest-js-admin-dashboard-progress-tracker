@@ -1,15 +1,18 @@
 import {
   Controller,
   Get,
+  Query,
 } from '@nestjs/common';
 
 import {
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 
 import { DashboardService } from './dashboard.service';
+import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -42,7 +45,25 @@ export class DashboardController {
     status: 200,
     description: 'Teacher analytics retrieved successfully.',
   })
-  getAnalytics() {
-    return this.dashboardService.getAnalytics();
+  @Get('analytics')
+  @ApiOperation({
+    summary: 'Get teacher analytics',
+  })
+  @ApiQuery({
+    name: 'gradeLevel',
+    required: false,
+    example: 3,
+  })
+  @ApiQuery({
+    name: 'section',
+    required: false,
+    example: 'A',
+  })
+  getAnalytics(
+    @Query() query: AnalyticsQueryDto,
+  ) {
+    return this.dashboardService.getAnalytics(query);
   }
+
+
 }
