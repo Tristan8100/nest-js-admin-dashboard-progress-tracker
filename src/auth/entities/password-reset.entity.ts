@@ -14,7 +14,7 @@ export class PasswordReset {
   @Prop({ required: true })
   code: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false, default: null })
   token: string;
 
   // Declare for TypeScript only

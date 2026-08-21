@@ -12,6 +12,7 @@ import {
 
 import { UserMapsController } from './user-maps.controller';
 import { UserMapsService } from './user-maps.service';
+import { UsersModule } from 'src/users/users.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { UserMapsService } from './user-maps.service';
         schema: UserMapSchema,
       },
     ]),
+    UsersModule
   ],
   controllers: [UserMapsController],
   providers: [UserMapsService],
