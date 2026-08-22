@@ -99,6 +99,7 @@ export class UsersService {
       password: hashedPassword,
       section: dto.section,
       gradeLevel: dto.gradeLevel,
+      gender: dto.gender,
 
       ...(dto.email
         ? {

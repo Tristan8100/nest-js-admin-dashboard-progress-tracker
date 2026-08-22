@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength, Matches, IsNumber } from 'class-validator';
+
+import {
+  IsString,
+  IsOptional,
+  MinLength,
+  Matches,
+  IsNumber,
+  IsEnum,
+} from 'class-validator';
 
 export class RegisterStudentDto {
   @ApiProperty({
@@ -15,13 +23,15 @@ export class RegisterStudentDto {
   })
   @IsString()
   @Matches(/^[a-zA-Z0-9_.]+$/, {
-    message: 'username can only contain letters, numbers, underscores, and periods',
+    message:
+      'username can only contain letters, numbers, underscores, and periods',
   })
   @MinLength(3)
   username: string;
 
   @ApiProperty({
-    description: 'Initial password for the student. Can be reset later by the teacher.',
+    description:
+      'Initial password for the student. Can be reset later by the teacher.',
     example: 'user123',
   })
   @IsString()
@@ -50,4 +60,12 @@ export class RegisterStudentDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @ApiProperty({
+    description: "The student's gender",
+    example: 'BOY',
+    enum: ['BOY', 'GIRL'],
+  })
+  @IsEnum(['BOY', 'GIRL'])
+  gender: 'BOY' | 'GIRL';
 }

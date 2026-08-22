@@ -53,6 +53,14 @@ export class User {
   password: string;
 
   @Prop({
+    type: String,
+    enum: ['BOY', 'GIRL'],
+    required: true,
+    default: null,
+  })
+  gender: 'BOY' | 'GIRL' | null;
+
+  @Prop({
     type: Date,
     default: null,
   })
