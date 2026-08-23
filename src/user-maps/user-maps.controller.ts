@@ -15,6 +15,7 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -25,12 +26,15 @@ import { UpdateProgressDto } from './dto/update-progress.dto/update-progress.dto
 
 import { AuthGuard } from 'src/auth/auth.guard';
 import { Role, RolesGuard } from 'src/auth/auth.user';
+import { SyncProgressDto } from './dto/sync-progress.dto/sync-progress.dto';
+import { ProgressTransformService } from './save-payload.service';
 
 @ApiTags('user-maps')
 @Controller('')
 export class UserMapsController {
   constructor(
     private readonly userMapsService: UserMapsService,
+    private readonly transformService: ProgressTransformService,
   ) {}
 
   // =========================
@@ -209,5 +213,26 @@ export class UserMapsController {
       Number(rank),
       Number(level),
     );
+  }
+
+  //actual sending of payload
+  @Post('transform-preview')
+  @ApiOperation({
+    summary: 'Transform a raw game payload into per-world map structure (preview only, does not save)',
+  })
+  transformPreview(@Body() dto: SyncProgressDto) {
+    return this.transformService.transform(dto);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sync the full progress payload from the game for the logged-in user' })
+  @ApiResponse({ status: 201, description: 'Progress synced successfully.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  @UseGuards(AuthGuard, RolesGuard)
+  @Role('user')
+  @Post('sync-progress')
+  syncProgress(@Request() req, @Body() dto: SyncProgressDto) {
+    const userId = req.user.id; // pulled from the JWT payload, not the client body
+    return this.transformService.syncProgress(userId, dto);
   }
 }

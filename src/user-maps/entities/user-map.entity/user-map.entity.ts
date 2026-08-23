@@ -25,7 +25,8 @@ export class MapProgress { //children
   })
   @Prop({
     type: Date,
-    required: true,
+    required: false,
+    default: Date.now,
   })
   date_acquired: Date;
 }

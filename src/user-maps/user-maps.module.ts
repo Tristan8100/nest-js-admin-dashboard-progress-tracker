@@ -13,6 +13,7 @@ import {
 import { UserMapsController } from './user-maps.controller';
 import { UserMapsService } from './user-maps.service';
 import { UsersModule } from 'src/users/users.module';
+import { ProgressTransformService } from './save-payload.service';
 
 @Module({
   imports: [
@@ -29,6 +30,6 @@ import { UsersModule } from 'src/users/users.module';
     UsersModule
   ],
   controllers: [UserMapsController],
-  providers: [UserMapsService],
+  providers: [UserMapsService, ProgressTransformService],
 })
 export class UserMapsModule {}
