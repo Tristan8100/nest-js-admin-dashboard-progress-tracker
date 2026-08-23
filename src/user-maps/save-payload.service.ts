@@ -42,7 +42,6 @@ export class ProgressTransformService {
    * Pure transform only — does not touch the database.
    */
   transform(dto: SyncProgressDto): TransformedMap[] {
-    // one bucket per world, in fixed order (materials, living, force, earth)
     const worldBuckets: TransformedProgressEntry[][] = [[], [], [], []];
 
     for (const entry of dto.levelProgress) {
@@ -74,11 +73,28 @@ export class ProgressTransformService {
       });
     }
 
-    return worldBuckets.map((progress, worldIndex) => ({
-      name: getMapName(worldIndex),
-      rank: getRank(worldIndex),
-      progress,
-    }));
+    // Define priority order for identical level indices: knowledge_check -> tutorial -> level
+    const typePriority: Record<string, number> = {
+      knowledge_check: 0,
+      tutorial: 1,
+      level: 2,
+    };
+
+    return worldBuckets.map((progress, worldIndex) => {
+      // Sort array by local level number first, then by pedagogical type priority
+      const sortedProgress = progress.sort((a, b) => {
+        if (a.level !== b.level) {
+          return a.level - b.level;
+        }
+        return typePriority[a.type] - typePriority[b.type];
+      });
+
+      return {
+        name: getMapName(worldIndex),
+        rank: getRank(worldIndex),
+        progress: sortedProgress,
+      };
+    });
   }
 
   async syncProgress(userId: string, dto: SyncProgressDto) {
