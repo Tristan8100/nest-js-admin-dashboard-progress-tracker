@@ -1,11 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   getWorldIndexForLevel,
-  getLocalLevelIndex,
   getWorldIndexForTutorial,
-  getLocalTutorialIndex,
   getWorldIndexForKnowledgeCheck,
-  getLocalKnowledgeCheckIndex,
   getMapName,
   getRank,
 } from './payload-mapping';
@@ -29,51 +26,64 @@ export interface TransformedMap {
 
 @Injectable()
 export class ProgressTransformService {
-    constructor(
-        @InjectModel(User.name)
-        private readonly userModel: Model<UserDocument>,
-    
-        @InjectModel(UserMap.name)
-        private readonly userMapModel: Model<UserMapDocument>,
-      ) {}
-  /**
-   * Takes the raw game payload (global indices) and groups it into the
-   * 4 per-world map structures the backend schema expects (local indices).
-   * Pure transform only — does not touch the database.
-   */
+  constructor(
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+
+    @InjectModel(UserMap.name)
+    private readonly userMapModel: Model<UserMapDocument>,
+  ) {}
+
   transform(dto: SyncProgressDto): TransformedMap[] {
     const worldBuckets: TransformedProgressEntry[][] = [[], [], [], []];
 
+    const addOrUpdateEntry = (worldIndex: number, newEntry: TransformedProgressEntry) => {
+      const bucket = worldBuckets[worldIndex];
+      const existing = bucket.find(
+        (e) => e.type === newEntry.type && e.level === newEntry.level,
+      );
+
+      if (existing) {
+        if (newEntry.score !== undefined) {
+          existing.score = Math.max(existing.score ?? 0, newEntry.score);
+        }
+      } else {
+        bucket.push(newEntry);
+      }
+    };
+
+    // Store absolute level index directly
     for (const entry of dto.levelProgress) {
       const worldIndex = getWorldIndexForLevel(entry.levelIndex);
       if (worldIndex === -1) continue;
-      worldBuckets[worldIndex].push({
+      addOrUpdateEntry(worldIndex, {
         type: 'level',
-        level: getLocalLevelIndex(entry.levelIndex),
+        level: entry.levelIndex, // Raw global index (e.g., 0-39)
         score: entry.stars,
       });
     }
 
+    // Store absolute tutorial index directly
     for (const entry of dto.tutorialProgress) {
       const worldIndex = getWorldIndexForTutorial(entry.tutorialIndex);
       if (worldIndex === -1) continue;
-      worldBuckets[worldIndex].push({
+      addOrUpdateEntry(worldIndex, {
         type: 'tutorial',
-        level: getLocalTutorialIndex(entry.tutorialIndex),
+        level: entry.tutorialIndex, // Raw global index (e.g., 4 instead of 0)
       });
     }
 
+    // Store absolute knowledge check index directly
     for (const entry of dto.knowledgeCheckProgress) {
       const worldIndex = getWorldIndexForKnowledgeCheck(entry.checkIndex);
       if (worldIndex === -1) continue;
-      worldBuckets[worldIndex].push({
+      addOrUpdateEntry(worldIndex, {
         type: 'knowledge_check',
-        level: getLocalKnowledgeCheckIndex(entry.checkIndex),
+        level: entry.checkIndex, // Raw global index (e.g., 2 instead of 0)
         score: entry.score,
       });
     }
 
-    // Define priority order for identical level indices: knowledge_check -> tutorial -> level
     const typePriority: Record<string, number> = {
       knowledge_check: 0,
       tutorial: 1,
@@ -81,7 +91,6 @@ export class ProgressTransformService {
     };
 
     return worldBuckets.map((progress, worldIndex) => {
-      // Sort array by local level number first, then by pedagogical type priority
       const sortedProgress = progress.sort((a, b) => {
         if (a.level !== b.level) {
           return a.level - b.level;
@@ -100,36 +109,32 @@ export class ProgressTransformService {
   async syncProgress(userId: string, dto: SyncProgressDto) {
     const userExists = await this.userModel.exists({ _id: userId });
     if (!userExists) throw new NotFoundException('User not found');
- 
+
     const transformedMaps = this.transform(dto);
- 
     const results: UserMapDocument[] = [];
- 
+
     for (const map of transformedMaps) {
-      // Skip worlds with nothing to sync — don't create/overwrite an empty map
-      // for a world the player hasn't touched yet.
       if (map.progress.length === 0) continue;
- 
+
       const existing = await this.userMapModel.findOne({
         user_id: new Types.ObjectId(userId),
         rank: map.rank,
       });
- 
+
       if (existing) {
-        // Already exists — delete then re-add, per the requested behavior.
         await this.userMapModel.deleteOne({ _id: existing._id });
       }
- 
+
       const created = await this.userMapModel.create({
         user_id: new Types.ObjectId(userId),
         name: map.name,
         rank: map.rank,
         progress: map.progress,
       });
- 
+
       results.push(created);
     }
- 
+
     return {
       message: 'Progress synced successfully',
       maps: results,
