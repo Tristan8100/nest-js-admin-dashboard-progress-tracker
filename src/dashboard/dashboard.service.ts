@@ -19,6 +19,7 @@ import {
   UserMapDocument,
 } from '../user-maps/entities/user-map.entity/user-map.entity';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import { LeaderboardQueryDto } from './dto/leaderbord-query.dto';
 
 @Injectable()
 export class DashboardService {
@@ -123,13 +124,14 @@ export class DashboardService {
       ]),
 
       /*
-       * Recent activity
+       * Recent activity — latest single activity per user, limit 5 users
        */
       this.userMapModel.aggregate([
         {
           $unwind: '$progress',
         },
 
+        // Sort first so that within each group, $first grabs the latest one
         {
           $sort: {
             'progress.date_acquired': -1,
@@ -137,13 +139,32 @@ export class DashboardService {
         },
 
         {
-          $limit: 10,
+          $group: {
+            _id: '$user_id',
+            map_name: { $first: '$name' },
+            rank: { $first: '$rank' },
+            type: { $first: '$progress.type' },
+            level: { $first: '$progress.level' },
+            score: { $first: '$progress.score' },
+            date_acquired: { $first: '$progress.date_acquired' },
+          },
+        },
+
+        // Re-sort the grouped (per-user) results by their latest activity
+        {
+          $sort: {
+            date_acquired: -1,
+          },
+        },
+
+        {
+          $limit: 5,
         },
 
         {
           $lookup: {
             from: 'users',
-            localField: 'user_id',
+            localField: '_id',
             foreignField: '_id',
             as: 'user',
           },
@@ -156,29 +177,17 @@ export class DashboardService {
         {
           $project: {
             _id: 0,
-
-            user_id: 1,
-
+            user_id: '$_id',
             student_name: '$user.name',
-
             username: '$user.username',
-
             gradeLevel: '$user.gradeLevel',
-
             section: '$user.section',
-
-            map_name: '$name',
-
+            map_name: 1,
             rank: 1,
-
-            type: '$progress.type',
-
-            level: '$progress.level',
-
-            score: '$progress.score',
-
-            date_acquired:
-              '$progress.date_acquired',
+            type: 1,
+            level: 1,
+            score: 1,
+            date_acquired: 1,
           },
         },
       ]),
@@ -377,6 +386,203 @@ export class DashboardService {
     };
   }
 
+  /*
+   * Leaderboard — top 10 and bottom 10 students by total score.
+   * Only 'level' type progress counts toward score/rate, since
+   * knowledge_check uses a different scale (correct-count) and
+   * tutorials have no score at all.
+   */
+  async getLeaderboard(query: LeaderboardQueryDto) {
+    const dateMatch: Record<string, any> = {};
+
+    if (query.startDate) {
+      dateMatch.$gte = new Date(query.startDate);
+    }
+
+    if (query.endDate) {
+      const end = new Date(query.endDate);
+      end.setHours(23, 59, 59, 999);
+      dateMatch.$lte = end;
+    }
+
+    const pipeline: any[] = [
+      {
+        $unwind: '$progress',
+      },
+    ];
+
+    if (Object.keys(dateMatch).length > 0) {
+      pipeline.push({
+        $match: {
+          'progress.date_acquired': dateMatch,
+        },
+      });
+    }
+
+    pipeline.push(
+      // Sort first so $first below grabs each student's latest activity
+      {
+        $sort: {
+          'progress.date_acquired': -1,
+        },
+      },
+
+      {
+        $group: {
+          _id: '$user_id',
+
+          // Last activity overall, regardless of type
+          lastMapName: { $first: '$name' },
+          lastRank: { $first: '$rank' },
+          lastType: { $first: '$progress.type' },
+          lastLevel: { $first: '$progress.level' },
+          lastDateAcquired: { $first: '$progress.date_acquired' },
+
+          // Only 'level' entries count toward score/rate
+          totalScore: {
+            $sum: {
+              $cond: [
+                { $eq: ['$progress.type', 'level'] },
+                { $ifNull: ['$progress.score', 0] },
+                0,
+              ],
+            },
+          },
+
+          levelsCompleted: {
+            $sum: {
+              $cond: [
+                { $eq: ['$progress.type', 'level'] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+
+      {
+        $unwind: '$user',
+      },
+
+      {
+        $match: {
+          'user.role': 'user',
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+          user_id: '$_id',
+          student_name: '$user.name',
+          username: '$user.username',
+          gradeLevel: '$user.gradeLevel',
+          section: '$user.section',
+
+          totalScore: 1,
+          levelsCompleted: 1,
+
+          scoreRate: {
+            $cond: [
+              { $gt: ['$levelsCompleted', 0] },
+              {
+                $round: [
+                  {
+                    $multiply: [
+                      {
+                        $divide: [
+                          '$totalScore',
+                          { $multiply: ['$levelsCompleted', 3] },
+                        ],
+                      },
+                      100,
+                    ],
+                  },
+                  2,
+                ],
+              },
+              0,
+            ],
+          },
+
+          lastActivity: {
+            map_name: '$lastMapName',
+            rank: '$lastRank',
+            type: '$lastType',
+            level: '$lastLevel',
+            date_acquired: '$lastDateAcquired',
+          },
+        },
+      },
+
+      // Get top 10 and bottom 10 in a single pass
+      {
+        $facet: {
+          top: [
+            {
+              $sort: {
+                totalScore: -1,
+                student_name: 1,
+              },
+            },
+            {
+              $limit: 10,
+            },
+          ],
+
+          bottom: [
+            {
+              $sort: {
+                totalScore: 1,
+                student_name: 1,
+              },
+            },
+            {
+              $limit: 10,
+            },
+          ],
+        },
+      },
+    );
+
+    const [result] = await this.userMapModel.aggregate(pipeline);
+
+    // Assign display rank: students tied on totalScore share the same
+    // rank number (e.g. 1, 1, 3, 4...) so the teacher knows there's no
+    // real difference between them — only genuinely lower scores rank lower.
+    const assignRanks = (list: any[]) => {
+      let lastScore: number | null = null;
+      let lastRank = 0;
+
+      return list.map((entry, index) => {
+        if (entry.totalScore !== lastScore) {
+          lastRank = index + 1;
+          lastScore = entry.totalScore;
+        }
+
+        return {
+          rank: lastRank,
+          ...entry,
+        };
+      });
+    };
+
+    return {
+      top: assignRanks(result?.top ?? []),
+      bottom: assignRanks(result?.bottom ?? []),
+    };
+  }
+
   //private methods
   private async getStudentsByGrade(
     filter: Record<string, any>,
@@ -535,43 +741,68 @@ export class DashboardService {
           },
         },
       },
+
       {
         $unwind: '$progress',
       },
+
+      // Sort first so that within each group, $first grabs the latest one
       {
         $sort: {
           'progress.date_acquired': -1,
         },
       },
+
+      {
+        $group: {
+          _id: '$user_id',
+          rank: { $first: '$rank' },
+          map_name: { $first: '$name' },
+          type: { $first: '$progress.type' },
+          level: { $first: '$progress.level' },
+          score: { $first: '$progress.score' },
+          date_acquired: { $first: '$progress.date_acquired' },
+        },
+      },
+
+      // Re-sort the grouped (per-user) results by their latest activity
+      {
+        $sort: {
+          date_acquired: -1,
+        },
+      },
+
       {
         $limit: 50,
       },
+
       {
         $lookup: {
           from: 'users',
-          localField: 'user_id',
+          localField: '_id',
           foreignField: '_id',
           as: 'student',
         },
       },
+
       {
         $unwind: '$student',
       },
+
       {
         $project: {
           _id: 0,
-          user_id: 1,
+          user_id: '$_id',
           rank: 1,
-          map_name: '$name',
+          map_name: 1,
 
           student_name: '$student.name',
           username: '$student.username',
 
-          type: '$progress.type',
-          level: '$progress.level',
-          score: '$progress.score',
-          date_acquired:
-            '$progress.date_acquired',
+          type: 1,
+          level: 1,
+          score: 1,
+          date_acquired: 1,
         },
       },
     ]);

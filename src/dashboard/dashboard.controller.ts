@@ -13,6 +13,7 @@ import {
 
 import { DashboardService } from './dashboard.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import { LeaderboardQueryDto } from './dto/leaderbord-query.dto';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -63,6 +64,20 @@ export class DashboardController {
     @Query() query: AnalyticsQueryDto,
   ) {
     return this.dashboardService.getAnalytics(query);
+  }
+
+  @Get('leaderboard')
+  @ApiOperation({
+    summary: 'Get teacher leaderboard',
+    description:
+      'Returns a list of students ranked by their progress and performance.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Teacher leaderboard retrieved successfully.',
+  })
+  getLeaderboard(@Query() query: LeaderboardQueryDto) {
+    return this.dashboardService.getLeaderboard(query);
   }
 
 
