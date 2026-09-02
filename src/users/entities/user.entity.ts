@@ -38,13 +38,13 @@ export class User {
   coins: number;
 
   @Prop({
-    required: true,
+    required: false,
     default: null,
   })
   gradeLevel: number;
 
   @Prop({
-    required: true,
+    required: false,
     default: null,
   })
   section: string;
