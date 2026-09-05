@@ -24,6 +24,11 @@ export class UserQueryDto {
   section?: string;
 
   @IsOptional()
+  @IsString()
+  @IsIn(['BOY', 'GIRL'])
+  gender?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

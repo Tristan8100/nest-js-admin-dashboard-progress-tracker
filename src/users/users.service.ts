@@ -182,6 +182,7 @@ export class UsersService {
       search,
       gradeLevel,
       section,
+      gender,
       page = 1,
       limit = 10,
       sortBy = 'created_at',
@@ -208,6 +209,10 @@ export class UsersService {
 
     if (section?.trim()) {
       filter.section = section.trim();
+    }
+
+    if (gender?.trim()) {
+      filter.gender = gender.trim();
     }
 
     const skip = (page - 1) * limit;
