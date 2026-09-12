@@ -67,9 +67,8 @@ export class SyncProgressDto {
   // ===== Declared here only so validation doesn't reject/strip the payload. =====
 
   @ApiProperty({ required: false, description: 'Not used by this endpoint — local display name only.' })
-  @IsOptional()
   @IsString()
-  username?: string;
+  username: string; //actual name on db, doesn't change since it's the game original field.
 
   @ApiProperty({ required: false, description: 'Not used by this endpoint — local save slot number.' })
   @IsOptional()

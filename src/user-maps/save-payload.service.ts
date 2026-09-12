@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   getWorldIndexForLevel,
   getWorldIndexForTutorial,
@@ -106,9 +106,22 @@ export class ProgressTransformService {
     });
   }
 
+  async compareNames(dbName: string, payloadName: string) {
+    if (dbName.toLowerCase() !== payloadName.toLowerCase()) {
+      throw new BadRequestException(
+        `Username mismatch: expected "${dbName}", got "${payloadName}".`,
+      );
+    }
+  }
+
   async syncProgress(userId: string, dto: SyncProgressDto) {
-    const userExists = await this.userModel.exists({ _id: userId });
-    if (!userExists) throw new NotFoundException('User not found');
+    // const userExists = await this.userModel.exists({ _id: userId });
+    // if (!userExists) throw new NotFoundException('User not found');
+
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.compareNames(user.name, dto.username);
 
     const transformedMaps = this.transform(dto);
     const results: UserMapDocument[] = [];
