@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray, IsInt, IsBoolean, IsOptional, ValidateNested, Min,
   IsString, IsNumber,
+  IsNotEmpty,
 } from 'class-validator';
 
 export class LevelProgressDto {
@@ -63,12 +64,13 @@ export class SyncProgressDto {
   @Type(() => KnowledgeCheckProgressDto)
   knowledgeCheckProgress: KnowledgeCheckProgressDto[];
 
+  @ApiProperty({ required: true, description: 'Important field since it validate the existing name on db and in' })
+  @IsString()
+  @IsNotEmpty()
+  username: string; //actual name on db, doesn't change since it's the game original field.
+
   // ===== Fields below are sent by the game but not used by this endpoint. =====
   // ===== Declared here only so validation doesn't reject/strip the payload. =====
-
-  @ApiProperty({ required: false, description: 'Not used by this endpoint — local display name only.' })
-  @IsString()
-  username: string; //actual name on db, doesn't change since it's the game original field.
 
   @ApiProperty({ required: false, description: 'Not used by this endpoint — local save slot number.' })
   @IsOptional()
