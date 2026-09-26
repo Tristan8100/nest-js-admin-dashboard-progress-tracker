@@ -136,7 +136,15 @@ export class UserMapsService {
   async findAllUserMaps(userId: string) {
     const userObjectId = this.getObjectId(userId);
 
-    return this.userMapModel
+    const userMeta = await this.userModel
+    .findOne({ _id: userObjectId })
+    .select("gradeLevel coins gender username");
+
+    if (!userMeta) {
+      throw new NotFoundException('User not found');
+    }
+
+    const userMaps = await this.userMapModel
       .find({
         user_id: userObjectId,
       })
@@ -144,6 +152,11 @@ export class UserMapsService {
         rank: 1,
       })
       .lean();
+
+    return {
+      userMeta,
+      userMaps,
+    };
   }
 
   async findUserMap(

@@ -117,6 +117,8 @@ export class ProgressTransformService {
   async syncProgress(userId: string, dto: SyncProgressDto) {
     // const userExists = await this.userModel.exists({ _id: userId });
     // if (!userExists) throw new NotFoundException('User not found');
+    try {
+      console.log('currentProgress:', dto.currentProgress);
 
     const user = await this.userModel.findById(userId).exec();
     if (!user) throw new NotFoundException('User not found');
@@ -145,6 +147,13 @@ export class ProgressTransformService {
         progress: map.progress,
       });
 
+      //JSONUserSaveManager.cs SyncProgressFromApi, ClearProgressOnly, ClearSelectedSlotProgressOnly, Save
+      if (dto.stars !== undefined) {
+        user.coins = dto.stars; // Save the user document to ensure any changes are persisted
+        await user.save();
+      }
+      
+
       results.push(created);
     }
 
@@ -152,5 +161,11 @@ export class ProgressTransformService {
       message: 'Progress synced successfully',
       maps: results,
     };
+    } catch (error) {
+      console.error('Error during syncProgress:', error);
+      throw new BadRequestException('An error occurred while syncing progress.');
+    }
+
+    
   }
 }
