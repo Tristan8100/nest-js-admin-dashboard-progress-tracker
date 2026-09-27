@@ -4,20 +4,57 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type UserMapDocument = HydratedDocument<UserMap>;
 
+@Schema({ _id: false }) //children children
+export class ProgressAttempt {
+  @ApiProperty({
+    description: 'The date and time when the attempt occurred',
+    example: '2026-09-27T01:00:00.000Z',
+  })
+  @Prop({
+    type: Date,
+    required: true,
+  })
+  attempt_time: Date;
+
+  @ApiProperty({
+    description: 'The score achieved during this attempt',
+    example: 3,
+  })
+  @Prop({
+    type: Number,
+    required: true,
+  })
+  score: number;
+}
+
+export const ProgressAttemptSchema =
+  SchemaFactory.createForClass(ProgressAttempt);
+
+
 @Schema({ _id: false })
-export class MapProgress { //children
-  @Prop({ type: String, enum: ['level', 'tutorial', 'knowledge_check'], required: true })
+export class MapProgress { // children
+  @Prop({
+    type: String,
+    enum: ['level', 'tutorial', 'knowledge_check'],
+    required: true,
+  })
   type: string;
 
   @ApiProperty({
     description: 'The level of the completed item',
     example: 1,
   })
-  @Prop({ type: Number, required: false })
-  level?: number; // level index, tutorial index, or KC index — depends on `type`
+  @Prop({
+    type: Number,
+    required: false,
+  })
+  level?: number;
 
-  @Prop({ type: Number, required: false })
-  score?: number; // stars (levels), correct-count (knowledge checks). Omit/null for tutorials.
+  @Prop({
+    type: Number,
+    required: false,
+  })
+  score?: number;
 
   @ApiProperty({
     description: 'The date the level was acquired',
@@ -29,6 +66,17 @@ export class MapProgress { //children
     default: Date.now,
   })
   date_acquired: Date;
+
+  @ApiProperty({
+    description: 'History of attempts for this progress item',
+    type: [ProgressAttempt],
+    default: [],
+  })
+  @Prop({
+    type: [ProgressAttemptSchema],
+    default: [],
+  })
+  attempts: ProgressAttempt[];
 }
 
 export const MapProgressSchema =

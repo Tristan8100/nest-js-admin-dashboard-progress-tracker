@@ -1,171 +1,515 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+
 import {
+  UserMap,
+  UserMapDocument,
+  MapProgress,
+} from './entities/user-map.entity/user-map.entity';
+
+import { SyncProgressDto } from './dto/sync-progress.dto/sync-progress.dto';
+
+import {
+  WORLD_NAMES,
   getWorldIndexForLevel,
   getWorldIndexForTutorial,
   getWorldIndexForKnowledgeCheck,
   getMapName,
   getRank,
 } from './payload-mapping';
-import { SyncProgressDto } from './dto/sync-progress.dto/sync-progress.dto';
-import { Model, Types } from 'mongoose';
-import { UserMap, UserMapDocument } from './entities/user-map.entity/user-map.entity';
-import { User, UserDocument } from 'src/users/entities/user.entity';
-import { InjectModel } from '@nestjs/mongoose';
-
-export interface TransformedProgressEntry {
-  type: 'level' | 'tutorial' | 'knowledge_check';
-  level: number;
-  score?: number;
-}
-
-export interface TransformedMap {
-  name: string;
-  rank: number;
-  progress: TransformedProgressEntry[];
-}
 
 @Injectable()
 export class ProgressTransformService {
   constructor(
-    @InjectModel(User.name)
-    private readonly userModel: Model<UserDocument>,
-
     @InjectModel(UserMap.name)
     private readonly userMapModel: Model<UserMapDocument>,
   ) {}
 
-  transform(dto: SyncProgressDto): TransformedMap[] {
-    const worldBuckets: TransformedProgressEntry[][] = [[], [], [], []];
+  // =========================================================
+  // PREVIEW ONLY
+  // =========================================================
 
-    const addOrUpdateEntry = (worldIndex: number, newEntry: TransformedProgressEntry) => {
-      const bucket = worldBuckets[worldIndex];
-      const existing = bucket.find(
-        (e) => e.type === newEntry.type && e.level === newEntry.level,
+  transform(dto: SyncProgressDto) {
+    const maps = WORLD_NAMES.map((name, worldIndex) => ({
+      name,
+      rank: getRank(worldIndex),
+      progress: [] as MapProgress[],
+    }));
+
+    // ---------------------------------------------------------
+    // LEVELS
+    // ---------------------------------------------------------
+
+    for (const level of dto.levelProgress ?? []) {
+      const worldIndex = getWorldIndexForLevel(
+        level.levelIndex,
       );
 
-      if (existing) {
-        if (newEntry.score !== undefined) {
-          existing.score = Math.max(existing.score ?? 0, newEntry.score);
-        }
-      } else {
-        bucket.push(newEntry);
+      if (worldIndex === -1) {
+        continue;
       }
-    };
 
-    // Store absolute level index directly
-    for (const entry of dto.levelProgress) {
-      const worldIndex = getWorldIndexForLevel(entry.levelIndex);
-      if (worldIndex === -1) continue;
-      addOrUpdateEntry(worldIndex, {
+      maps[worldIndex].progress.push({
         type: 'level',
-        level: entry.levelIndex, // Raw global index (e.g., 0-39)
-        score: entry.stars,
+        level: level.levelIndex,
+        score: level.stars,
+        date_acquired: new Date(),
+        attempts: [],
       });
     }
 
-    // Store absolute tutorial index directly
-    for (const entry of dto.tutorialProgress) {
-      const worldIndex = getWorldIndexForTutorial(entry.tutorialIndex);
-      if (worldIndex === -1) continue;
-      addOrUpdateEntry(worldIndex, {
+    // ---------------------------------------------------------
+    // TUTORIALS
+    // ---------------------------------------------------------
+
+    for (const tutorial of dto.tutorialProgress ?? []) {
+      if (!tutorial.finished) {
+        continue;
+      }
+
+      const worldIndex = getWorldIndexForTutorial(
+        tutorial.tutorialIndex,
+      );
+
+      if (worldIndex === -1) {
+        continue;
+      }
+
+      maps[worldIndex].progress.push({
         type: 'tutorial',
-        level: entry.tutorialIndex, // Raw global index (e.g., 4 instead of 0)
+        level: tutorial.tutorialIndex,
+        date_acquired: new Date(),
+        attempts: [],
       });
     }
 
-    // Store absolute knowledge check index directly
-    for (const entry of dto.knowledgeCheckProgress) {
-      const worldIndex = getWorldIndexForKnowledgeCheck(entry.checkIndex);
-      if (worldIndex === -1) continue;
-      addOrUpdateEntry(worldIndex, {
+    // ---------------------------------------------------------
+    // KNOWLEDGE CHECKS
+    // ---------------------------------------------------------
+
+    for (const check of dto.knowledgeCheckProgress ?? []) {
+      if (!check.finished) {
+        continue;
+      }
+
+      const worldIndex =
+        getWorldIndexForKnowledgeCheck(
+          check.checkIndex,
+        );
+
+      if (worldIndex === -1) {
+        continue;
+      }
+
+      maps[worldIndex].progress.push({
         type: 'knowledge_check',
-        level: entry.checkIndex, // Raw global index (e.g., 2 instead of 0)
-        score: entry.score,
+        level: check.checkIndex,
+        score: check.score,
+        date_acquired: new Date(),
+        attempts: [],
       });
     }
 
-    const typePriority: Record<string, number> = {
-      knowledge_check: 0,
-      tutorial: 1,
-      level: 2,
-    };
-
-    return worldBuckets.map((progress, worldIndex) => {
-      const sortedProgress = progress.sort((a, b) => {
-        if (a.level !== b.level) {
-          return a.level - b.level;
-        }
-        return typePriority[a.type] - typePriority[b.type];
-      });
-
-      return {
-        name: getMapName(worldIndex),
-        rank: getRank(worldIndex),
-        progress: sortedProgress,
-      };
-    });
+    return maps;
   }
 
-  async compareNames(dbName: string, payloadName: string) {
-    if (dbName.toLowerCase() !== payloadName.toLowerCase()) {
-      throw new BadRequestException(
-        `Username mismatch: expected "${dbName}", got "${payloadName}".`,
+  // =========================================================
+  // ACTUAL SYNC
+  // =========================================================
+
+  async syncProgress(
+    userId: string | Types.ObjectId,
+    dto: SyncProgressDto,
+  ) {
+    const objectUserId =
+      userId instanceof Types.ObjectId
+        ? userId
+        : new Types.ObjectId(userId);
+
+    // =======================================================
+    // IMPORTANT:
+    //
+    // EVERYTHING BELOW THIS SECTION happens BEFORE the main
+    // payload is processed/saved.
+    //
+    // We take a snapshot of whether currentProgress ALREADY
+    // existed in MongoDB.
+    // =======================================================
+
+    let isRetry = false;
+    let previousScore: number | undefined;
+
+    let currentMapRank: number | undefined;
+    let currentProgressType: string | undefined;
+    let currentProgressLevel: number | undefined;
+    let currentAttemptTime: Date | undefined;
+    let currentAttemptScore = 0;
+
+    const current = dto.currentProgress;
+
+    if (
+      current &&
+      current.progressType &&
+      current.progressIndex !== undefined &&
+      current.progressIndex >= 0
+    ) {
+      // -----------------------------------------------------
+      // NORMALIZE TYPE
+      // -----------------------------------------------------
+
+      const rawType =
+        current.progressType.toLowerCase();
+
+      currentProgressType =
+        rawType === 'knowledgecheck'
+          ? 'knowledge_check'
+          : rawType;
+
+      currentProgressLevel =
+        current.progressIndex;
+
+      // -----------------------------------------------------
+      // NORMALIZE WORLD USING SAME PAYLOAD MAPPING
+      // -----------------------------------------------------
+
+      let worldIndex = -1;
+
+      switch (currentProgressType) {
+        case 'level':
+          worldIndex = getWorldIndexForLevel(
+            current.progressIndex,
+          );
+          break;
+
+        case 'tutorial':
+          worldIndex = getWorldIndexForTutorial(
+            current.progressIndex,
+          );
+          break;
+
+        case 'knowledge_check':
+          worldIndex =
+            getWorldIndexForKnowledgeCheck(
+              current.progressIndex,
+            );
+          break;
+      }
+
+      if (worldIndex !== -1) {
+        currentMapRank = getRank(worldIndex);
+
+        // ---------------------------------------------------
+        // ATTEMPT TIME
+        // ---------------------------------------------------
+
+        if (current.clientTimestamp) {
+          const parsedDate = new Date(
+            current.clientTimestamp,
+          );
+
+          if (!Number.isNaN(parsedDate.getTime())) {
+            currentAttemptTime = parsedDate;
+          }
+        }
+
+        if (!currentAttemptTime) {
+          currentAttemptTime = new Date();
+        }
+
+        currentAttemptScore = current.score ?? 0;
+
+        // ---------------------------------------------------
+        // CRITICAL:
+        //
+        // SEARCH MONGODB BEFORE DOING ANYTHING ELSE.
+        //
+        // This query determines whether this is a RETRY.
+        // ---------------------------------------------------
+
+        const existingMap =
+          await this.userMapModel
+            .findOne({
+              user_id: objectUserId,
+              rank: currentMapRank,
+            })
+            .lean();
+
+        if (existingMap) {
+          const existingProgress =
+            existingMap.progress?.find(
+              (progress) =>
+                progress.type ===
+                  currentProgressType &&
+                progress.level ===
+                  currentProgressLevel,
+            );
+
+          if (existingProgress) {
+            // THIS WAS ALREADY IN DB BEFORE THIS SYNC.
+            isRetry = true;
+
+            previousScore =
+              existingProgress.score;
+          }
+        }
+      }
+    }
+
+    // =======================================================
+    // FROM THIS POINT FORWARD:
+    //
+    // isRetry CANNOT CHANGE.
+    //
+    // The main payload is now allowed to create/update data,
+    // but it can no longer accidentally turn a first attempt
+    // into a retry.
+    // =======================================================
+
+    // =======================================================
+    // LOAD EXISTING MAPS
+    // =======================================================
+
+    const existingMaps =
+      await this.userMapModel.find({
+        user_id: objectUserId,
+      });
+
+    const mapsByRank = new Map<
+      number,
+      UserMapDocument
+    >();
+
+    for (const map of existingMaps) {
+      mapsByRank.set(map.rank, map);
+    }
+
+    // =======================================================
+    // GET OR CREATE MAP
+    // =======================================================
+
+    const getOrCreateMap = (
+      worldIndex: number,
+    ): UserMapDocument => {
+      const rank = getRank(worldIndex);
+
+      let userMap = mapsByRank.get(rank);
+
+      if (!userMap) {
+        userMap = new this.userMapModel({
+          user_id: objectUserId,
+          name: getMapName(worldIndex),
+          rank,
+          progress: [],
+        });
+
+        mapsByRank.set(rank, userMap);
+      }
+
+      return userMap;
+    };
+
+    // =======================================================
+    // UPSERT PROGRESS
+    // =======================================================
+
+    const upsertProgress = (
+      userMap: UserMapDocument,
+      type: string,
+      level: number,
+      score?: number,
+    ) => {
+      const existingProgress =
+        userMap.progress.find(
+          (progress) =>
+            progress.type === type &&
+            progress.level === level,
+        );
+
+      if (existingProgress) {
+        if (score !== undefined) {
+          existingProgress.score = score;
+        }
+
+        return;
+      }
+
+      userMap.progress.push({
+        type,
+        level,
+        ...(score !== undefined
+          ? { score }
+          : {}),
+        date_acquired: new Date(),
+        attempts: [],
+      });
+    };
+
+    // =======================================================
+    // LEVEL PROGRESS
+    // =======================================================
+
+    for (const level of dto.levelProgress ?? []) {
+      const worldIndex =
+        getWorldIndexForLevel(
+          level.levelIndex,
+        );
+
+      if (worldIndex === -1) {
+        continue;
+      }
+
+      const userMap =
+        getOrCreateMap(worldIndex);
+
+      upsertProgress(
+        userMap,
+        'level',
+        level.levelIndex,
+        level.stars,
       );
     }
-  }
 
-  async syncProgress(userId: string, dto: SyncProgressDto) {
-    // const userExists = await this.userModel.exists({ _id: userId });
-    // if (!userExists) throw new NotFoundException('User not found');
-    try {
-      console.log('currentProgress:', dto.currentProgress);
+    // =======================================================
+    // TUTORIAL PROGRESS
+    // =======================================================
 
-    const user = await this.userModel.findById(userId).exec();
-    if (!user) throw new NotFoundException('User not found');
-
-    await this.compareNames(user.name, dto.username);
-
-    const transformedMaps = this.transform(dto);
-    const results: UserMapDocument[] = [];
-
-    for (const map of transformedMaps) {
-      if (map.progress.length === 0) continue;
-
-      const existing = await this.userMapModel.findOne({
-        user_id: new Types.ObjectId(userId),
-        rank: map.rank,
-      });
-
-      if (existing) {
-        await this.userMapModel.deleteOne({ _id: existing._id });
+    for (const tutorial of dto.tutorialProgress ?? []) {
+      if (!tutorial.finished) {
+        continue;
       }
 
-      const created = await this.userMapModel.create({
-        user_id: new Types.ObjectId(userId),
-        name: map.name,
-        rank: map.rank,
-        progress: map.progress,
-      });
+      const worldIndex =
+        getWorldIndexForTutorial(
+          tutorial.tutorialIndex,
+        );
 
-      //JSONUserSaveManager.cs SyncProgressFromApi, ClearProgressOnly, ClearSelectedSlotProgressOnly, Save
-      if (dto.stars !== undefined) {
-        user.coins = dto.stars; // Save the user document to ensure any changes are persisted
-        await user.save();
+      if (worldIndex === -1) {
+        continue;
       }
-      
 
-      results.push(created);
+      const userMap =
+        getOrCreateMap(worldIndex);
+
+      upsertProgress(
+        userMap,
+        'tutorial',
+        tutorial.tutorialIndex,
+      );
     }
 
-    return {
-      message: 'Progress synced successfully',
-      maps: results,
-    };
-    } catch (error) {
-      console.error('Error during syncProgress:', error);
-      throw new BadRequestException('An error occurred while syncing progress.');
+    // =======================================================
+    // KNOWLEDGE CHECK PROGRESS
+    // =======================================================
+
+    for (const check of dto.knowledgeCheckProgress ?? []) {
+      if (!check.finished) {
+        continue;
+      }
+
+      const worldIndex =
+        getWorldIndexForKnowledgeCheck(
+          check.checkIndex,
+        );
+
+      if (worldIndex === -1) {
+        continue;
+      }
+
+      const userMap =
+        getOrCreateMap(worldIndex);
+
+      upsertProgress(
+        userMap,
+        'knowledge_check',
+        check.checkIndex,
+        check.score,
+      );
     }
 
-    
+    // =======================================================
+    // SAVE NORMAL PAYLOAD
+    // =======================================================
+
+    for (const userMap of mapsByRank.values()) {
+      await userMap.save();
+    }
+
+    // =======================================================
+    // RETRY HANDLING
+    // =======================================================
+    //
+    // ONLY runs when the progress was found in MongoDB
+    // BEFORE this sync started.
+    //
+    // Therefore:
+    //
+    // First attempt:
+    //     isRetry = false
+    //     -> NO attempts entry
+    //
+    // Retry:
+    //     isRetry = true
+    //     -> append exactly ONE attempt
+    // =======================================================
+
+    if (
+      isRetry &&
+      currentMapRank !== undefined &&
+      currentProgressType !== undefined &&
+      currentProgressLevel !== undefined &&
+      currentAttemptTime
+    ) {
+      const currentMap =
+        await this.userMapModel.findOne({
+          user_id: objectUserId,
+          rank: currentMapRank,
+        });
+
+      if (currentMap) {
+        const currentMapProgress =
+          currentMap.progress.find(
+            (progress) =>
+              progress.type ===
+                currentProgressType &&
+              progress.level ===
+                currentProgressLevel,
+          );
+
+        if (currentMapProgress) {
+          // -------------------------------------------------
+          // RETRY ALWAYS GETS RECORDED
+          // -------------------------------------------------
+
+          currentMapProgress.attempts.push({
+            attempt_time: currentAttemptTime,
+            score: currentAttemptScore,
+          });
+
+          // -------------------------------------------------
+          // date_acquired ONLY MOVES IF THE RETRY MATCHES
+          // OR BEATS THE PREVIOUS SCORE.
+          // -------------------------------------------------
+
+          if (
+            previousScore === undefined ||
+            currentAttemptScore >= previousScore
+          ) {
+            currentMapProgress.date_acquired =
+              currentAttemptTime;
+          }
+
+          await currentMap.save();
+        }
+      }
+    }
+
+    // =======================================================
+    // RETURN FINAL USER MAPS
+    // =======================================================
+
+    return this.userMapModel.find({
+      user_id: objectUserId,
+    });
   }
 }

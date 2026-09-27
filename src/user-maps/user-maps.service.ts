@@ -86,6 +86,7 @@ export class UserMapsService {
         level: createProgressDto.level,
         score: createProgressDto.score,
         date_acquired: new Date(),
+        attempts: [], // Initialize attempts as an empty array for new progress, required for easier handling in frontend
       });
     } else {
       existingProgress.score = createProgressDto.score;
