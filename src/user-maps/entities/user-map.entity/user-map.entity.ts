@@ -25,6 +25,13 @@ export class ProgressAttempt {
     required: true,
   })
   score: number;
+
+  @ApiProperty({
+    description: 'Whether this attempt was a successful retry',
+    example: false,
+  })
+  @Prop({ type: Boolean, default: false })
+  statusRetry: boolean;
 }
 
 export const ProgressAttemptSchema =
@@ -32,7 +39,7 @@ export const ProgressAttemptSchema =
 
 
 @Schema({ _id: false })
-export class MapProgress { // children
+export class MapProgress {
   @Prop({
     type: String,
     enum: ['level', 'tutorial', 'knowledge_check'],
@@ -40,26 +47,12 @@ export class MapProgress { // children
   })
   type: string;
 
-  @ApiProperty({
-    description: 'The level of the completed item',
-    example: 1,
-  })
-  @Prop({
-    type: Number,
-    required: false,
-  })
+  @Prop({ type: Number, required: false })
   level?: number;
 
-  @Prop({
-    type: Number,
-    required: false,
-  })
+  @Prop({ type: Number, required: false })
   score?: number;
 
-  @ApiProperty({
-    description: 'The date the level was acquired',
-    example: '2026-08-15T12:30:00.000Z',
-  })
   @Prop({
     type: Date,
     required: false,
@@ -67,11 +60,6 @@ export class MapProgress { // children
   })
   date_acquired: Date;
 
-  @ApiProperty({
-    description: 'History of attempts for this progress item',
-    type: [ProgressAttempt],
-    default: [],
-  })
   @Prop({
     type: [ProgressAttemptSchema],
     default: [],

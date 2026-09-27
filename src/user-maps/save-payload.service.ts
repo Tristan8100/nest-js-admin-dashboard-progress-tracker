@@ -18,6 +18,7 @@ import {
   getMapName,
   getRank,
 } from './payload-mapping';
+import { getProgressRetryStatus } from './helpers/progress-retry-status';
 
 @Injectable()
 export class ProgressTransformService {
@@ -42,9 +43,7 @@ export class ProgressTransformService {
     // ---------------------------------------------------------
 
     for (const level of dto.levelProgress ?? []) {
-      const worldIndex = getWorldIndexForLevel(
-        level.levelIndex,
-      );
+      const worldIndex = getWorldIndexForLevel(level.levelIndex);
 
       if (worldIndex === -1) {
         continue;
@@ -68,9 +67,7 @@ export class ProgressTransformService {
         continue;
       }
 
-      const worldIndex = getWorldIndexForTutorial(
-        tutorial.tutorialIndex,
-      );
+      const worldIndex = getWorldIndexForTutorial(tutorial.tutorialIndex);
 
       if (worldIndex === -1) {
         continue;
@@ -93,10 +90,7 @@ export class ProgressTransformService {
         continue;
       }
 
-      const worldIndex =
-        getWorldIndexForKnowledgeCheck(
-          check.checkIndex,
-        );
+      const worldIndex = getWorldIndexForKnowledgeCheck(check.checkIndex);
 
       if (worldIndex === -1) {
         continue;
@@ -118,23 +112,37 @@ export class ProgressTransformService {
   // ACTUAL SYNC
   // =========================================================
 
-  async syncProgress(
-    userId: string | Types.ObjectId,
-    dto: SyncProgressDto,
-  ) {
+  async syncProgress(userId: string | Types.ObjectId, dto: SyncProgressDto) {
     const objectUserId =
       userId instanceof Types.ObjectId
         ? userId
         : new Types.ObjectId(userId);
 
     // =======================================================
-    // IMPORTANT:
+    // LOAD EXISTING MAPS FIRST
     //
-    // EVERYTHING BELOW THIS SECTION happens BEFORE the main
-    // payload is processed/saved.
+    // Everything below reads from this snapshot BEFORE any
+    // mutation happens, so it doubles as the "was this already
+    // in the DB" check for retry detection — no second query
+    // needed later.
+    // =======================================================
+
+    const existingMaps = await this.userMapModel.find({
+      user_id: objectUserId,
+    });
+
+    const mapsByRank = new Map<number, UserMapDocument>();
+
+    for (const map of existingMaps) {
+      mapsByRank.set(map.rank, map);
+    }
+
+    // =======================================================
+    // DETERMINE RETRY INFO FOR dto.currentProgress
     //
-    // We take a snapshot of whether currentProgress ALREADY
-    // existed in MongoDB.
+    // isRetry/previousScore are decided ONCE, from the
+    // pre-mutation snapshot above, and never change after
+    // this point.
     // =======================================================
 
     let isRetry = false;
@@ -158,16 +166,12 @@ export class ProgressTransformService {
       // NORMALIZE TYPE
       // -----------------------------------------------------
 
-      const rawType =
-        current.progressType.toLowerCase();
+      const rawType = current.progressType.toLowerCase();
 
       currentProgressType =
-        rawType === 'knowledgecheck'
-          ? 'knowledge_check'
-          : rawType;
+        rawType === 'knowledgecheck' ? 'knowledge_check' : rawType;
 
-      currentProgressLevel =
-        current.progressIndex;
+      currentProgressLevel = current.progressIndex;
 
       // -----------------------------------------------------
       // NORMALIZE WORLD USING SAME PAYLOAD MAPPING
@@ -177,22 +181,15 @@ export class ProgressTransformService {
 
       switch (currentProgressType) {
         case 'level':
-          worldIndex = getWorldIndexForLevel(
-            current.progressIndex,
-          );
+          worldIndex = getWorldIndexForLevel(current.progressIndex);
           break;
 
         case 'tutorial':
-          worldIndex = getWorldIndexForTutorial(
-            current.progressIndex,
-          );
+          worldIndex = getWorldIndexForTutorial(current.progressIndex);
           break;
 
         case 'knowledge_check':
-          worldIndex =
-            getWorldIndexForKnowledgeCheck(
-              current.progressIndex,
-            );
+          worldIndex = getWorldIndexForKnowledgeCheck(current.progressIndex);
           break;
       }
 
@@ -204,9 +201,7 @@ export class ProgressTransformService {
         // ---------------------------------------------------
 
         if (current.clientTimestamp) {
-          const parsedDate = new Date(
-            current.clientTimestamp,
-          );
+          const parsedDate = new Date(current.clientTimestamp);
 
           if (!Number.isNaN(parsedDate.getTime())) {
             currentAttemptTime = parsedDate;
@@ -220,77 +215,29 @@ export class ProgressTransformService {
         currentAttemptScore = current.score ?? 0;
 
         // ---------------------------------------------------
-        // CRITICAL:
-        //
-        // SEARCH MONGODB BEFORE DOING ANYTHING ELSE.
-        //
-        // This query determines whether this is a RETRY.
+        // WAS THIS ALREADY IN THE DB BEFORE THIS SYNC?
         // ---------------------------------------------------
 
-        const existingMap =
-          await this.userMapModel
-            .findOne({
-              user_id: objectUserId,
-              rank: currentMapRank,
-            })
-            .lean();
+        const existingMap = mapsByRank.get(currentMapRank);
 
-        if (existingMap) {
-          const existingProgress =
-            existingMap.progress?.find(
-              (progress) =>
-                progress.type ===
-                  currentProgressType &&
-                progress.level ===
-                  currentProgressLevel,
-            );
+        const existingProgress = existingMap?.progress?.find(
+          (progress) =>
+            progress.type === currentProgressType &&
+            progress.level === currentProgressLevel,
+        );
 
-          if (existingProgress) {
-            // THIS WAS ALREADY IN DB BEFORE THIS SYNC.
-            isRetry = true;
-
-            previousScore =
-              existingProgress.score;
-          }
+        if (existingProgress) {
+          isRetry = true;
+          previousScore = existingProgress.score;
         }
       }
-    }
-
-    // =======================================================
-    // FROM THIS POINT FORWARD:
-    //
-    // isRetry CANNOT CHANGE.
-    //
-    // The main payload is now allowed to create/update data,
-    // but it can no longer accidentally turn a first attempt
-    // into a retry.
-    // =======================================================
-
-    // =======================================================
-    // LOAD EXISTING MAPS
-    // =======================================================
-
-    const existingMaps =
-      await this.userMapModel.find({
-        user_id: objectUserId,
-      });
-
-    const mapsByRank = new Map<
-      number,
-      UserMapDocument
-    >();
-
-    for (const map of existingMaps) {
-      mapsByRank.set(map.rank, map);
     }
 
     // =======================================================
     // GET OR CREATE MAP
     // =======================================================
 
-    const getOrCreateMap = (
-      worldIndex: number,
-    ): UserMapDocument => {
+  const getOrCreateMap = (worldIndex: number): UserMapDocument => {
       const rank = getRank(worldIndex);
 
       let userMap = mapsByRank.get(rank);
@@ -311,6 +258,11 @@ export class ProgressTransformService {
 
     // =======================================================
     // UPSERT PROGRESS
+    //
+    // statusRetry now lives on each ATTEMPT, not on the
+    // progress record itself. It's only ever set when we push
+    // a new attempt — which only happens on the retry branch,
+    // for the single record matching dto.currentProgress.
     // =======================================================
 
     const upsertProgress = (
@@ -319,55 +271,96 @@ export class ProgressTransformService {
       level: number,
       score?: number,
     ) => {
-      const existingProgress =
-        userMap.progress.find(
-          (progress) =>
-            progress.type === type &&
-            progress.level === level,
-        );
+      const existingProgress = userMap.progress.find(
+        (progress) => progress.type === type && progress.level === level,
+      );
+
+      const isCurrentProgressRecord =
+        isRetry &&
+        currentAttemptTime !== undefined &&
+        currentMapRank === userMap.rank &&
+        currentProgressType === type &&
+        currentProgressLevel === level;
 
       if (existingProgress) {
-        if (score !== undefined) {
+        // -----------------------------------------------------
+        // MAIN PAYLOAD score overwrite — ONLY for records that
+        // are NOT the currentProgress record. The current-
+        // progress record's score is governed entirely by the
+        // retry check below, not by whatever the bulk payload
+        // sent for it.
+        // -----------------------------------------------------
+
+        if (!isCurrentProgressRecord && score !== undefined) {
           existingProgress.score = score;
         }
 
-        return;
-      }
+        // ---------------------------------------------------
+        // RETRY HANDLING — ONLY for the record matching
+        // dto.currentProgress, and ONLY if it existed before
+        // this sync started (isRetry was decided up top and
+        // can't change).
+        // ---------------------------------------------------
 
-      userMap.progress.push({
-        type,
-        level,
-        ...(score !== undefined
-          ? { score }
-          : {}),
-        date_acquired: new Date(),
-        attempts: [],
-      });
-    };
+        if (isCurrentProgressRecord) {
+          const statusRetry = getProgressRetryStatus(
+            type,
+            previousScore,
+            currentAttemptScore,
+          );
+
+          existingProgress.attempts.push({
+            attempt_time: currentAttemptTime as Date,
+            score: currentAttemptScore,
+            statusRetry,
+          });
+
+          // -------------------------------------------------
+          // score and date_acquired ONLY move when the retry
+          // is an actual success (statusRetry === true). A
+          // tie, a worse attempt, or a non-retry-eligible type
+          // (e.g. tutorial) never touches either field.
+          // -------------------------------------------------
+
+          if (statusRetry) {
+            existingProgress.score = currentAttemptScore;
+            existingProgress.date_acquired = currentAttemptTime as Date;
+          }
+        }
+
+        return;
+    }
+
+  // -----------------------------------------------------
+  // First time this record is created this sync -> can
+  // never be a retry (isRetry required it to already
+  // exist), so it's just a plain new record with no
+  // attempts yet.
+  // -----------------------------------------------------
+
+  userMap.progress.push({
+    type,
+    level,
+    ...(score !== undefined ? { score } : {}),
+    date_acquired: new Date(),
+    attempts: [],
+  });
+};
 
     // =======================================================
     // LEVEL PROGRESS
     // =======================================================
 
     for (const level of dto.levelProgress ?? []) {
-      const worldIndex =
-        getWorldIndexForLevel(
-          level.levelIndex,
-        );
+      const worldIndex = getWorldIndexForLevel(level.levelIndex);
 
       if (worldIndex === -1) {
         continue;
       }
 
-      const userMap =
-        getOrCreateMap(worldIndex);
+      const userMap = getOrCreateMap(worldIndex);
 
-      upsertProgress(
-        userMap,
-        'level',
-        level.levelIndex,
-        level.stars,
-      );
+      upsertProgress(userMap, 'level', level.levelIndex, level.stars);
     }
 
     // =======================================================
@@ -379,23 +372,15 @@ export class ProgressTransformService {
         continue;
       }
 
-      const worldIndex =
-        getWorldIndexForTutorial(
-          tutorial.tutorialIndex,
-        );
+      const worldIndex = getWorldIndexForTutorial(tutorial.tutorialIndex);
 
       if (worldIndex === -1) {
         continue;
       }
 
-      const userMap =
-        getOrCreateMap(worldIndex);
+      const userMap = getOrCreateMap(worldIndex);
 
-      upsertProgress(
-        userMap,
-        'tutorial',
-        tutorial.tutorialIndex,
-      );
+      upsertProgress(userMap, 'tutorial', tutorial.tutorialIndex);
     }
 
     // =======================================================
@@ -407,28 +392,20 @@ export class ProgressTransformService {
         continue;
       }
 
-      const worldIndex =
-        getWorldIndexForKnowledgeCheck(
-          check.checkIndex,
-        );
+      const worldIndex = getWorldIndexForKnowledgeCheck(check.checkIndex);
 
       if (worldIndex === -1) {
         continue;
       }
 
-      const userMap =
-        getOrCreateMap(worldIndex);
+      const userMap = getOrCreateMap(worldIndex);
 
-      upsertProgress(
-        userMap,
-        'knowledge_check',
-        check.checkIndex,
-        check.score,
-      );
+      upsertProgress(userMap, 'knowledge_check', check.checkIndex, check.score);
     }
 
     // =======================================================
-    // SAVE NORMAL PAYLOAD
+    // SAVE — single save pass, retry data already applied
+    // above, no second query/save needed.
     // =======================================================
 
     for (const userMap of mapsByRank.values()) {
@@ -436,80 +413,9 @@ export class ProgressTransformService {
     }
 
     // =======================================================
-    // RETRY HANDLING
-    // =======================================================
-    //
-    // ONLY runs when the progress was found in MongoDB
-    // BEFORE this sync started.
-    //
-    // Therefore:
-    //
-    // First attempt:
-    //     isRetry = false
-    //     -> NO attempts entry
-    //
-    // Retry:
-    //     isRetry = true
-    //     -> append exactly ONE attempt
-    // =======================================================
-
-    if (
-      isRetry &&
-      currentMapRank !== undefined &&
-      currentProgressType !== undefined &&
-      currentProgressLevel !== undefined &&
-      currentAttemptTime
-    ) {
-      const currentMap =
-        await this.userMapModel.findOne({
-          user_id: objectUserId,
-          rank: currentMapRank,
-        });
-
-      if (currentMap) {
-        const currentMapProgress =
-          currentMap.progress.find(
-            (progress) =>
-              progress.type ===
-                currentProgressType &&
-              progress.level ===
-                currentProgressLevel,
-          );
-
-        if (currentMapProgress) {
-          // -------------------------------------------------
-          // RETRY ALWAYS GETS RECORDED
-          // -------------------------------------------------
-
-          currentMapProgress.attempts.push({
-            attempt_time: currentAttemptTime,
-            score: currentAttemptScore,
-          });
-
-          // -------------------------------------------------
-          // date_acquired ONLY MOVES IF THE RETRY MATCHES
-          // OR BEATS THE PREVIOUS SCORE.
-          // -------------------------------------------------
-
-          if (
-            previousScore === undefined ||
-            currentAttemptScore >= previousScore
-          ) {
-            currentMapProgress.date_acquired =
-              currentAttemptTime;
-          }
-
-          await currentMap.save();
-        }
-      }
-    }
-
-    // =======================================================
     // RETURN FINAL USER MAPS
     // =======================================================
 
-    return this.userMapModel.find({
-      user_id: objectUserId,
-    });
+    return this.userMapModel.find({ user_id: objectUserId });
   }
 }
