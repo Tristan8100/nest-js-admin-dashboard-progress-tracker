@@ -326,6 +326,8 @@ export class DashboardService {
     const {
       gradeLevel,
       section,
+      batch,
+      active,
     } = query;
 
     const studentFilter: Record<string, any> = {
@@ -340,9 +342,20 @@ export class DashboardService {
       studentFilter.section = section.trim();
     }
 
+    if (batch !== undefined) {
+      studentFilter.batch = batch;
+    }
+
+    if (active !== undefined) {
+      studentFilter.active = active;
+    } else {
+      // By default only include active students in analytics
+      studentFilter.active = true;
+    }
+
     const students = await this.userModel
       .find(studentFilter)
-      .select('_id name username gradeLevel section')
+      .select('_id name username gradeLevel section batch active')
       .lean();
 
     const studentIds = students.map(

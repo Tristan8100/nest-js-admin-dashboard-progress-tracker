@@ -44,6 +44,19 @@ export class User {
   gradeLevel: number;
 
   @Prop({
+    type: Number,
+    required: false,
+    default: null,
+  })
+  batch: number | null;
+
+  @Prop({
+    required: true,
+    default: true,
+  })
+  active: boolean;
+
+  @Prop({
     required: false,
     default: null,
   })

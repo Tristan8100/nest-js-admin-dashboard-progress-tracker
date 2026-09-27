@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsNumber, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsInt, IsBoolean } from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -51,4 +51,21 @@ export class CreateUserDto {
   @IsString()
   @MinLength(8)
   password: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional batch year (nullable).',
+    example: 2026,
+  })
+  @IsOptional()
+  @IsInt()
+  batch?: number;
+
+  @ApiPropertyOptional({
+    description: 'User active flag. Default true when omitted.',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }

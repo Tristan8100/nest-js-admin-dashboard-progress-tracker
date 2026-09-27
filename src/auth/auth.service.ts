@@ -75,6 +75,10 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('User not found');
 
+    if (user.active === false) {
+      throw new ForbiddenException('User is inactive');
+    }
+
     // Only teachers go through email verification.
     // Students don't have email verification at all.
     if (user.role === 'admin' && !user.email_verified_at) {

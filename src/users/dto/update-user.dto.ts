@@ -6,6 +6,7 @@ import {
   IsString,
   Min,
   MinLength,
+  IsBoolean,
 } from 'class-validator';
 
 export class UpdateUserDto {
@@ -61,4 +62,22 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   section?: string;
+
+  @ApiPropertyOptional({
+    description: 'The student\'s batch year (nullable).',
+    example: 2026,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  batch?: number;
+
+  @ApiPropertyOptional({
+    description: 'Whether the user is active. Inactive users cannot sign in.',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }

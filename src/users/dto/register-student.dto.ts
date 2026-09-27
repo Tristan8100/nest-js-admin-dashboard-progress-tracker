@@ -7,6 +7,8 @@ import {
   Matches,
   IsNumber,
   IsEnum,
+  IsInt,
+  IsBoolean,
 } from 'class-validator';
 
 export class RegisterStudentDto {
@@ -60,6 +62,24 @@ export class RegisterStudentDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @ApiProperty({
+    description: 'Optional batch year for the student',
+    example: 2026,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  batch?: number;
+
+  @ApiProperty({
+    description: 'Optional active flag (default true).',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 
   @ApiProperty({
     description: "The student's gender",

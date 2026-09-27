@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   IsIn,
   IsInt,
@@ -6,6 +6,7 @@ import {
   IsString,
   Max,
   Min,
+  IsBoolean,
 } from 'class-validator';
 
 export class UserQueryDto {
@@ -22,6 +23,16 @@ export class UserQueryDto {
   @IsOptional()
   @IsString()
   section?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  batch?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === 'true' || value === true))
+  @IsBoolean()
+  active?: boolean;
 
   @IsOptional()
   @IsString()

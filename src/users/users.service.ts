@@ -69,6 +69,8 @@ export class UsersService {
       role: 'admin', // default role since teacher can only register
       password: hashedPassword,
       email_verified_at: null,
+      batch: createUserDto.batch ?? null,
+      active: createUserDto.active ?? true,
     });
   }
 
@@ -100,6 +102,9 @@ export class UsersService {
       section: dto.section,
       gradeLevel: dto.gradeLevel,
       gender: dto.gender,
+
+      batch: dto.batch ?? null,
+      active: dto.active ?? true,
 
       ...(dto.email
         ? {
@@ -213,6 +218,14 @@ export class UsersService {
 
     if (gender?.trim()) {
       filter.gender = gender.trim();
+    }
+
+    if ((query as any).batch !== undefined) {
+      filter.batch = (query as any).batch;
+    }
+
+    if ((query as any).active !== undefined) {
+      filter.active = (query as any).active;
     }
 
     const skip = (page - 1) * limit;
