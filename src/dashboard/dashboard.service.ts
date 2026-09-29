@@ -1,23 +1,8 @@
 import { Injectable } from '@nestjs/common';
-
-import {
-  InjectModel,
-} from '@nestjs/mongoose';
-
-import {
-  Model,
-  Types,
-} from 'mongoose';
-
-import {
-  User,
-  UserDocument,
-} from '../users/entities/user.entity';
-
-import {
-  UserMap,
-  UserMapDocument,
-} from '../user-maps/entities/user-map.entity/user-map.entity';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { User, UserDocument } from '../users/entities/user.entity';
+import { UserMap, UserMapDocument } from '../user-maps/entities/user-map.entity/user-map.entity';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { LeaderboardQueryDto } from './dto/leaderbord-query.dto';
 
@@ -33,11 +18,7 @@ export class DashboardService {
 
   async getDashboard() {
     const now = new Date();
-
-    const sevenDaysAgo = new Date(
-      now.getTime() -
-        7 * 24 * 60 * 60 * 1000,
-    );
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     const [
       totalStudents,
@@ -48,35 +29,24 @@ export class DashboardService {
       recentStudents,
       studentsNeedingAttention,
     ] = await Promise.all([
-      /*
-       * Total students
-       */
+      /* Total students */
       this.userModel.countDocuments({
         role: 'user',
       }),
 
-      /*
-       * Students who have started at least
-       * one map
-       */
+      /* Students who have started at least one map */
       this.userModel.countDocuments({
         role: 'user',
         _id: {
-          $in: await this.userMapModel.distinct(
-            'user_id',
-          ),
+          $in: await this.userMapModel.distinct('user_id'),
         },
       }),
 
-      /*
-       * Students with activity within
-       * the last 7 days
-       */
+      /* Students with activity within the last 7 days */
       this.userMapModel.aggregate([
         {
-          unwind:'progress',
+          $unwind: '$progress',
         },
-
         {
           $match: {
             'progress.date_acquired': {
@@ -84,26 +54,21 @@ export class DashboardService {
             },
           },
         },
-
         {
           $group: {
             _id: '$user_id',
           },
         },
-
         {
           $count: 'count',
         },
       ]),
 
-      /*
-       * Average completed items per student
-       */
+      /* Average completed items per student */
       this.userMapModel.aggregate([
         {
-          unwind:'progress',
+          $unwind: '$progress',
         },
-
         {
           $group: {
             _id: '$user_id',
@@ -112,55 +77,45 @@ export class DashboardService {
             },
           },
         },
-
         {
           $group: {
             _id: null,
             average: {
-              avg:'completed',
+              $avg: '$completed',
             },
           },
         },
       ]),
 
-      /*
-       * Recent activity — latest single activity per user, limit 5 users
-       */
+      /* Recent activity — latest single activity per user, limit 5 users */
       this.userMapModel.aggregate([
         {
-          unwind:'progress',
+          $unwind: '$progress',
         },
-
-        // Sort first so that within each group, $first grabs the latest one
         {
           $sort: {
             'progress.date_acquired': -1,
           },
         },
-
         {
           $group: {
             _id: '$user_id',
-            map_name: { first:'name' },
-            rank: { first:'rank' },
-            type: { first:'progress.type' },
-            level: { first:'progress.level' },
-            score: { first:'progress.score' },
-            date_acquired: { first:'progress.date_acquired' },
+            map_name: { $first: '$name' },
+            rank: { $first: '$rank' },
+            type: { $first: '$progress.type' },
+            level: { $first: '$progress.level' },
+            score: { $first: '$progress.score' },
+            date_acquired: { $first: '$progress.date_acquired' },
           },
         },
-
-        // Re-sort the grouped (per-user) results by their latest activity
         {
           $sort: {
             date_acquired: -1,
           },
         },
-
         {
           $limit: 5,
         },
-
         {
           $lookup: {
             from: 'users',
@@ -169,11 +124,9 @@ export class DashboardService {
             as: 'user',
           },
         },
-
         {
-          unwind:'user',
+          $unwind: '$user',
         },
-
         {
           $project: {
             _id: 0,
@@ -192,25 +145,19 @@ export class DashboardService {
         },
       ]),
 
-      /*
-       * Recently registered students
-       */
+      /* Recently registered students */
       this.userModel
         .find({
           role: 'user',
         })
-        .select(
-          'name username gradeLevel section created_at',
-        )
+        .select('name username gradeLevel section created_at')
         .sort({
           created_at: -1,
         })
         .limit(5)
         .lean(),
 
-      /*
-       * Students with low activity
-       */
+      /* Students with low activity */
       this.userMapModel.aggregate([
         {
           $unwind: {
@@ -218,33 +165,19 @@ export class DashboardService {
             preserveNullAndEmptyArrays: true,
           },
         },
-
         {
           $group: {
             _id: '$user_id',
-
             completed: {
               $sum: {
-                $cond: [
-                  {
-                    $ne: [
-                      '$progress',
-                      null,
-                    ],
-                  },
-                  1,
-                  0,
-                ],
+                $cond: [{ $ne: ['$progress', null] }, 1, 0],
               },
             },
-
             lastActivity: {
-              $max:
-                '$progress.date_acquired',
+              $max: '$progress.date_acquired',
             },
           },
         },
-
         {
           $lookup: {
             from: 'users',
@@ -253,45 +186,32 @@ export class DashboardService {
             as: 'user',
           },
         },
-
         {
-          unwind:'user',
+          $unwind: '$user',
         },
-
         {
           $match: {
             'user.role': 'user',
           },
         },
-
         {
           $project: {
             _id: 0,
-
             user_id: '$_id',
-
             name: '$user.name',
-
             username: '$user.username',
-
-            gradeLevel:
-              '$user.gradeLevel',
-
+            gradeLevel: '$user.gradeLevel',
             section: '$user.section',
-
             completed: 1,
-
             lastActivity: 1,
           },
         },
-
         {
           $sort: {
             completed: 1,
             lastActivity: 1,
           },
         },
-
         {
           $limit: 10,
         },
@@ -301,34 +221,19 @@ export class DashboardService {
     return {
       summary: {
         totalStudents,
-
         startedStudents,
-
-        activeStudents:
-          activeStudents[0]?.count ?? 0,
-
+        activeStudents: activeStudents[0]?.count ?? 0,
         averageCompleted:
-          Math.round(
-            (averageCompleted[0]?.average ?? 0) *
-              100,
-          ) / 100,
+          Math.round((averageCompleted[0]?.average ?? 0) * 100) / 100,
       },
-
       recentActivity,
-
       recentStudents,
-
       studentsNeedingAttention,
     };
   }
 
   async getAnalytics(query: AnalyticsQueryDto) {
-    const {
-      gradeLevel,
-      section,
-      batch,
-      active,
-    } = query;
+    const { gradeLevel, section, batch, active } = query;
 
     const studentFilter: Record<string, any> = {
       role: 'user',
@@ -349,7 +254,6 @@ export class DashboardService {
     if (active !== undefined) {
       studentFilter.active = active;
     } else {
-      // By default only include active students in analytics
       studentFilter.active = true;
     }
 
@@ -358,9 +262,7 @@ export class DashboardService {
       .select('_id name username gradeLevel section batch active')
       .lean();
 
-    const studentIds = students.map(
-      (student) => student._id,
-    );
+    const studentIds = students.map((student) => student._id);
 
     const [
       overview,
@@ -369,25 +271,11 @@ export class DashboardService {
       mapPerformance,
       activity,
     ] = await Promise.all([
-      this.getAnalyticsOverview(
-        studentIds,
-      ),
-
-      this.getStudentsByGrade(
-        studentFilter,
-      ),
-
-      this.getStudentsBySection(
-        studentFilter,
-      ),
-
-      this.getMapPerformance(
-        studentIds,
-      ),
-
-      this.getActivity(
-        studentIds,
-      ),
+      this.getAnalyticsOverview(studentIds),
+      this.getStudentsByGrade(studentFilter),
+      this.getStudentsBySection(studentFilter),
+      this.getMapPerformance(studentIds),
+      this.getActivity(studentIds),
     ]);
 
     return {
@@ -399,15 +287,6 @@ export class DashboardService {
     };
   }
 
-  /*
-   * Leaderboard — top 10 and bottom 10 students by finalScore.
-   * Only 'level' type progress counts toward score/rate/retries, since
-   * knowledge_check uses a different scale (correct-count) and
-   * tutorials have no score at all.
-   *
-   * retryCount = attempts with statusRetry === true on 'level' entries.
-   * finalScore = totalScore - retryCount (1 point per retry, can be negative).
-   */
   async getLeaderboard(query: LeaderboardQueryDto) {
     const dateMatch: Record<string, any> = {};
 
@@ -423,7 +302,7 @@ export class DashboardService {
 
     const pipeline: any[] = [
       {
-        unwind:'progress',
+        $unwind: '$progress',
       },
     ];
 
@@ -436,30 +315,26 @@ export class DashboardService {
     }
 
     pipeline.push(
-      // Sort first so $first below grabs each student's latest activity
       {
         $sort: {
           'progress.date_acquired': -1,
         },
       },
-
       {
         $group: {
           _id: '$user_id',
 
-          // Last activity overall, regardless of type
-          lastMapName: { first:'name' },
-          lastRank: { first:'rank' },
-          lastType: { first:'progress.type' },
-          lastLevel: { first:'progress.level' },
-          lastDateAcquired: { first:'progress.date_acquired' },
+          lastMapName: { $first: '$name' },
+          lastRank: { $first: '$rank' },
+          lastType: { $first: '$progress.type' },
+          lastLevel: { $first: '$progress.level' },
+          lastDateAcquired: { $first: '$progress.date_acquired' },
 
-          // Only 'level' entries count toward score/rate
           totalScore: {
             $sum: {
               $cond: [
-                { eq:['progress.type', 'level'] },
-                { ifNull:['progress.score', 0] },
+                { $eq: ['$progress.type', 'level'] },
+                { $ifNull: ['$progress.score', 0] },
                 0,
               ],
             },
@@ -467,27 +342,20 @@ export class DashboardService {
 
           levelsCompleted: {
             $sum: {
-              $cond: [
-                { eq:['progress.type', 'level'] },
-                1,
-                0,
-              ],
+              $cond: [{ $eq: ['$progress.type', 'level'] }, 1, 0],
             },
           },
 
-          // NEW: number of retry attempts (statusRetry === true) on 'level'
-          // entries. Counted inside Mongo only, attempts are never returned.
-          // Missing attempts array counts as 0.
           retryCount: {
             $sum: {
               $cond: [
-                { eq:['progress.type', 'level'] },
+                { $eq: ['$progress.type', 'level'] },
                 {
                   $size: {
                     $filter: {
-                      input: { ifNull:['progress.attempts', []] },
+                      input: { $ifNull: ['$progress.attempts', []] },
                       as: 'attempt',
-                      cond: { eq:['$attempt.statusRetry', true] },
+                      cond: { $eq: ['$$attempt.statusRetry', true] },
                     },
                   },
                 },
@@ -497,7 +365,6 @@ export class DashboardService {
           },
         },
       },
-
       {
         $lookup: {
           from: 'users',
@@ -506,17 +373,14 @@ export class DashboardService {
           as: 'user',
         },
       },
-
       {
-        unwind:'user',
+        $unwind: '$user',
       },
-
       {
         $match: {
           'user.role': 'user',
         },
       },
-
       {
         $project: {
           _id: 0,
@@ -528,19 +392,15 @@ export class DashboardService {
 
           totalScore: 1,
           levelsCompleted: 1,
-
-          // NEW
           retryCount: 1,
 
-          // NEW: 1 point deducted per retry
           finalScore: {
-            subtract:['totalScore', '$retryCount'],
+            $subtract: ['$totalScore', '$retryCount'],
           },
 
-          // UNCHANGED: still based on totalScore
           scoreRate: {
             $cond: [
-              { gt:['levelsCompleted', 0] },
+              { $gt: ['$levelsCompleted', 0] },
               {
                 $round: [
                   {
@@ -548,7 +408,7 @@ export class DashboardService {
                       {
                         $divide: [
                           '$totalScore',
-                          { multiply:['levelsCompleted', 3] },
+                          { $multiply: ['$levelsCompleted', 3] },
                         ],
                       },
                       100,
@@ -570,8 +430,6 @@ export class DashboardService {
           },
         },
       },
-
-      // Get top 10 and bottom 10 in a single pass, now by finalScore
       {
         $facet: {
           top: [
@@ -585,7 +443,6 @@ export class DashboardService {
               $limit: 10,
             },
           ],
-
           bottom: [
             {
               $sort: {
@@ -603,9 +460,6 @@ export class DashboardService {
 
     const [result] = await this.userMapModel.aggregate(pipeline);
 
-    // Assign display rank: students tied on finalScore share the same
-    // rank number (e.g. 1, 1, 3, 4...) so the teacher knows there's no
-    // real difference between them — only genuinely lower scores rank lower.
     const assignRanks = (list: any[]) => {
       let lastScore: number | null = null;
       let lastRank = 0;
@@ -629,10 +483,7 @@ export class DashboardService {
     };
   }
 
-  //private methods
-  private async getStudentsByGrade(
-    filter: Record<string, any>,
-  ) {
+  private async getStudentsByGrade(filter: Record<string, any>) {
     return this.userModel.aggregate([
       {
         $match: filter,
@@ -658,9 +509,7 @@ export class DashboardService {
     ]);
   }
 
-  private async getStudentsBySection(
-    filter: Record<string, any>,
-  ) {
+  private async getStudentsBySection(filter: Record<string, any>) {
     return this.userModel.aggregate([
       {
         $match: filter,
@@ -686,9 +535,7 @@ export class DashboardService {
     ]);
   }
 
-  private async getMapPerformance(
-    studentIds: Types.ObjectId[],
-  ) {
+  private async getMapPerformance(studentIds: Types.ObjectId[]) {
     return this.userMapModel.aggregate([
       {
         $match: {
@@ -709,36 +556,20 @@ export class DashboardService {
             rank: '$rank',
             name: '$name',
           },
-
           students: {
-            addToSet:'user_id',
+            $addToSet: '$user_id',
           },
-
           completed: {
             $sum: 1,
           },
-
           totalScore: {
             $sum: {
-              $ifNull: [
-                '$progress.score',
-                0,
-              ],
+              $ifNull: ['$progress.score', 0],
             },
           },
-
           scoredItems: {
             $sum: {
-              $cond: [
-                {
-                  $ne: [
-                    '$progress.score',
-                    null,
-                  ],
-                },
-                1,
-                0,
-              ],
+              $cond: [{ $ne: ['$progress.score', null] }, 1, 0],
             },
           },
         },
@@ -749,20 +580,13 @@ export class DashboardService {
           rank: '$_id.rank',
           name: '$_id.name',
           students: {
-            size:'students',
+            $size: '$students',
           },
           completed: 1,
           averageScore: {
             $cond: [
-              {
-                gt:['scoredItems', 0],
-              },
-              {
-                $divide: [
-                  '$totalScore',
-                  '$scoredItems',
-                ],
-              },
+              { $gt: ['$scoredItems', 0] },
+              { $divide: ['$totalScore', '$scoredItems'] },
               0,
             ],
           },
@@ -776,9 +600,7 @@ export class DashboardService {
     ]);
   }
 
-  private async getActivity(
-    studentIds: Types.ObjectId[],
-  ) {
+  private async getActivity(studentIds: Types.ObjectId[]) {
     return this.userMapModel.aggregate([
       {
         $match: {
@@ -787,41 +609,33 @@ export class DashboardService {
           },
         },
       },
-
       {
-        unwind:'progress',
+        $unwind: '$progress',
       },
-
-      // Sort first so that within each group, $first grabs the latest one
       {
         $sort: {
           'progress.date_acquired': -1,
         },
       },
-
       {
         $group: {
           _id: '$user_id',
-          rank: { first:'rank' },
-          map_name: { first:'name' },
-          type: { first:'progress.type' },
-          level: { first:'progress.level' },
-          score: { first:'progress.score' },
-          date_acquired: { first:'progress.date_acquired' },
+          rank: { $first: '$rank' },
+          map_name: { $first: '$name' },
+          type: { $first: '$progress.type' },
+          level: { $first: '$progress.level' },
+          score: { $first: '$progress.score' },
+          date_acquired: { $first: '$progress.date_acquired' },
         },
       },
-
-      // Re-sort the grouped (per-user) results by their latest activity
       {
         $sort: {
           date_acquired: -1,
         },
       },
-
       {
         $limit: 50,
       },
-
       {
         $lookup: {
           from: 'users',
@@ -830,21 +644,17 @@ export class DashboardService {
           as: 'student',
         },
       },
-
       {
-        unwind:'student',
+        $unwind: '$student',
       },
-
       {
         $project: {
           _id: 0,
           user_id: '$_id',
           rank: 1,
           map_name: 1,
-
           student_name: '$student.name',
           username: '$student.username',
-
           type: 1,
           level: 1,
           score: 1,
@@ -854,9 +664,7 @@ export class DashboardService {
     ]);
   }
 
-  private async getAnalyticsOverview(
-    studentIds: Types.ObjectId[],
-  ) {
+  private async getAnalyticsOverview(studentIds: Types.ObjectId[]) {
     if (studentIds.length === 0) {
       return {
         totalStudents: 0,
@@ -884,42 +692,33 @@ export class DashboardService {
       {
         $group: {
           _id: '$user_id',
-
           completed: {
             $sum: 1,
           },
-
           lastActivity: {
-            max:'progress.date_acquired',
+            $max: '$progress.date_acquired',
           },
         },
       },
       {
         $group: {
           _id: null,
-
           startedStudents: {
             $sum: 1,
           },
-
           totalCompleted: {
-            sum:'completed',
+            $sum: '$completed',
           },
-
           averageCompleted: {
-            avg:'completed',
+            $avg: '$completed',
           },
-
           activeStudents: {
             $sum: {
               $cond: [
                 {
                   $gte: [
                     '$lastActivity',
-                    new Date(
-                      Date.now() -
-                        7 * 24 * 60 * 60 * 1000,
-                    ),
+                    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
                   ],
                 },
                 1,
@@ -938,11 +737,7 @@ export class DashboardService {
       startedStudents: data?.startedStudents ?? 0,
       activeStudents: data?.activeStudents ?? 0,
       totalCompleted: data?.totalCompleted ?? 0,
-      averageCompleted: Math.round(
-        (data?.averageCompleted ?? 0) * 100,
-      ) / 100,
+      averageCompleted: Math.round((data?.averageCompleted ?? 0) * 100) / 100,
     };
   }
 }
-
-            
