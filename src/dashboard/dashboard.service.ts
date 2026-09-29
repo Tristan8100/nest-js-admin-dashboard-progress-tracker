@@ -74,7 +74,7 @@ export class DashboardService {
        */
       this.userMapModel.aggregate([
         {
-          $unwind: '$progress',
+          unwind:'progress',
         },
 
         {
@@ -101,7 +101,7 @@ export class DashboardService {
        */
       this.userMapModel.aggregate([
         {
-          $unwind: '$progress',
+          unwind:'progress',
         },
 
         {
@@ -117,7 +117,7 @@ export class DashboardService {
           $group: {
             _id: null,
             average: {
-              $avg: '$completed',
+              avg:'completed',
             },
           },
         },
@@ -128,7 +128,7 @@ export class DashboardService {
        */
       this.userMapModel.aggregate([
         {
-          $unwind: '$progress',
+          unwind:'progress',
         },
 
         // Sort first so that within each group, $first grabs the latest one
@@ -141,12 +141,12 @@ export class DashboardService {
         {
           $group: {
             _id: '$user_id',
-            map_name: { $first: '$name' },
-            rank: { $first: '$rank' },
-            type: { $first: '$progress.type' },
-            level: { $first: '$progress.level' },
-            score: { $first: '$progress.score' },
-            date_acquired: { $first: '$progress.date_acquired' },
+            map_name: { first:'name' },
+            rank: { first:'rank' },
+            type: { first:'progress.type' },
+            level: { first:'progress.level' },
+            score: { first:'progress.score' },
+            date_acquired: { first:'progress.date_acquired' },
           },
         },
 
@@ -171,7 +171,7 @@ export class DashboardService {
         },
 
         {
-          $unwind: '$user',
+          unwind:'user',
         },
 
         {
@@ -255,7 +255,7 @@ export class DashboardService {
         },
 
         {
-          $unwind: '$user',
+          unwind:'user',
         },
 
         {
@@ -400,10 +400,13 @@ export class DashboardService {
   }
 
   /*
-   * Leaderboard — top 10 and bottom 10 students by total score.
-   * Only 'level' type progress counts toward score/rate, since
+   * Leaderboard — top 10 and bottom 10 students by finalScore.
+   * Only 'level' type progress counts toward score/rate/retries, since
    * knowledge_check uses a different scale (correct-count) and
    * tutorials have no score at all.
+   *
+   * retryCount = attempts with statusRetry === true on 'level' entries.
+   * finalScore = totalScore - retryCount (1 point per retry, can be negative).
    */
   async getLeaderboard(query: LeaderboardQueryDto) {
     const dateMatch: Record<string, any> = {};
@@ -420,7 +423,7 @@ export class DashboardService {
 
     const pipeline: any[] = [
       {
-        $unwind: '$progress',
+        unwind:'progress',
       },
     ];
 
@@ -445,18 +448,18 @@ export class DashboardService {
           _id: '$user_id',
 
           // Last activity overall, regardless of type
-          lastMapName: { $first: '$name' },
-          lastRank: { $first: '$rank' },
-          lastType: { $first: '$progress.type' },
-          lastLevel: { $first: '$progress.level' },
-          lastDateAcquired: { $first: '$progress.date_acquired' },
+          lastMapName: { first:'name' },
+          lastRank: { first:'rank' },
+          lastType: { first:'progress.type' },
+          lastLevel: { first:'progress.level' },
+          lastDateAcquired: { first:'progress.date_acquired' },
 
           // Only 'level' entries count toward score/rate
           totalScore: {
             $sum: {
               $cond: [
-                { $eq: ['$progress.type', 'level'] },
-                { $ifNull: ['$progress.score', 0] },
+                { eq:['progress.type', 'level'] },
+                { ifNull:['progress.score', 0] },
                 0,
               ],
             },
@@ -465,8 +468,29 @@ export class DashboardService {
           levelsCompleted: {
             $sum: {
               $cond: [
-                { $eq: ['$progress.type', 'level'] },
+                { eq:['progress.type', 'level'] },
                 1,
+                0,
+              ],
+            },
+          },
+
+          // NEW: number of retry attempts (statusRetry === true) on 'level'
+          // entries. Counted inside Mongo only, attempts are never returned.
+          // Missing attempts array counts as 0.
+          retryCount: {
+            $sum: {
+              $cond: [
+                { eq:['progress.type', 'level'] },
+                {
+                  $size: {
+                    $filter: {
+                      input: { ifNull:['progress.attempts', []] },
+                      as: 'attempt',
+                      cond: { eq:['$attempt.statusRetry', true] },
+                    },
+                  },
+                },
                 0,
               ],
             },
@@ -484,7 +508,7 @@ export class DashboardService {
       },
 
       {
-        $unwind: '$user',
+        unwind:'user',
       },
 
       {
@@ -505,9 +529,18 @@ export class DashboardService {
           totalScore: 1,
           levelsCompleted: 1,
 
+          // NEW
+          retryCount: 1,
+
+          // NEW: 1 point deducted per retry
+          finalScore: {
+            subtract:['totalScore', '$retryCount'],
+          },
+
+          // UNCHANGED: still based on totalScore
           scoreRate: {
             $cond: [
-              { $gt: ['$levelsCompleted', 0] },
+              { gt:['levelsCompleted', 0] },
               {
                 $round: [
                   {
@@ -515,7 +548,7 @@ export class DashboardService {
                       {
                         $divide: [
                           '$totalScore',
-                          { $multiply: ['$levelsCompleted', 3] },
+                          { multiply:['levelsCompleted', 3] },
                         ],
                       },
                       100,
@@ -538,13 +571,13 @@ export class DashboardService {
         },
       },
 
-      // Get top 10 and bottom 10 in a single pass
+      // Get top 10 and bottom 10 in a single pass, now by finalScore
       {
         $facet: {
           top: [
             {
               $sort: {
-                totalScore: -1,
+                finalScore: -1,
                 student_name: 1,
               },
             },
@@ -556,7 +589,7 @@ export class DashboardService {
           bottom: [
             {
               $sort: {
-                totalScore: 1,
+                finalScore: 1,
                 student_name: 1,
               },
             },
@@ -570,7 +603,7 @@ export class DashboardService {
 
     const [result] = await this.userMapModel.aggregate(pipeline);
 
-    // Assign display rank: students tied on totalScore share the same
+    // Assign display rank: students tied on finalScore share the same
     // rank number (e.g. 1, 1, 3, 4...) so the teacher knows there's no
     // real difference between them — only genuinely lower scores rank lower.
     const assignRanks = (list: any[]) => {
@@ -578,9 +611,9 @@ export class DashboardService {
       let lastRank = 0;
 
       return list.map((entry, index) => {
-        if (entry.totalScore !== lastScore) {
+        if (entry.finalScore !== lastScore) {
           lastRank = index + 1;
-          lastScore = entry.totalScore;
+          lastScore = entry.finalScore;
         }
 
         return {
@@ -678,7 +711,7 @@ export class DashboardService {
           },
 
           students: {
-            $addToSet: '$user_id',
+            addToSet:'user_id',
           },
 
           completed: {
@@ -716,13 +749,13 @@ export class DashboardService {
           rank: '$_id.rank',
           name: '$_id.name',
           students: {
-            $size: '$students',
+            size:'students',
           },
           completed: 1,
           averageScore: {
             $cond: [
               {
-                $gt: ['$scoredItems', 0],
+                gt:['scoredItems', 0],
               },
               {
                 $divide: [
@@ -756,7 +789,7 @@ export class DashboardService {
       },
 
       {
-        $unwind: '$progress',
+        unwind:'progress',
       },
 
       // Sort first so that within each group, $first grabs the latest one
@@ -769,12 +802,12 @@ export class DashboardService {
       {
         $group: {
           _id: '$user_id',
-          rank: { $first: '$rank' },
-          map_name: { $first: '$name' },
-          type: { $first: '$progress.type' },
-          level: { $first: '$progress.level' },
-          score: { $first: '$progress.score' },
-          date_acquired: { $first: '$progress.date_acquired' },
+          rank: { first:'rank' },
+          map_name: { first:'name' },
+          type: { first:'progress.type' },
+          level: { first:'progress.level' },
+          score: { first:'progress.score' },
+          date_acquired: { first:'progress.date_acquired' },
         },
       },
 
@@ -799,7 +832,7 @@ export class DashboardService {
       },
 
       {
-        $unwind: '$student',
+        unwind:'student',
       },
 
       {
@@ -857,7 +890,7 @@ export class DashboardService {
           },
 
           lastActivity: {
-            $max: '$progress.date_acquired',
+            max:'progress.date_acquired',
           },
         },
       },
@@ -870,11 +903,11 @@ export class DashboardService {
           },
 
           totalCompleted: {
-            $sum: '$completed',
+            sum:'completed',
           },
 
           averageCompleted: {
-            $avg: '$completed',
+            avg:'completed',
           },
 
           activeStudents: {
@@ -911,3 +944,5 @@ export class DashboardService {
     };
   }
 }
+
+            
