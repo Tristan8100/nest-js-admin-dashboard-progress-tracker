@@ -28,16 +28,13 @@ export function getProgressRetryStatus(
     return false;
   }
 
-  const current = currentScore ?? 0;
   const previous = previousScore ?? undefined;
 
   if (previous === undefined) {
     return false;
   }
 
-  if (current >= perfectScore && previous < perfectScore) {
-    return true;
-  }
+  
 
-  return false;
+  return previous < perfectScore;
 }
