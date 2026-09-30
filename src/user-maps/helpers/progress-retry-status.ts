@@ -30,11 +30,12 @@ export function getProgressRetryStatus(
 
   const previous = previousScore ?? undefined;
 
-  if (previous === undefined) {
+  // If the previous score is undefined, we cannot determine if the user has improved or not, so we return false.
+  if (previous === undefined) { 
     return false;
   }
 
   
 
-  return previous < perfectScore;
+  return previous < perfectScore; //updated modified return
 }
